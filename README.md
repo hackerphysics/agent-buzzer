@@ -48,13 +48,16 @@ To inspect the JSON without sending, use `test-card --dry-run`.
 npm run install:local
 ```
 
-The installer packages three native adapters, registers a local Codex marketplace plugin, installs a Copilot CLI plugin, copies a Hermes plugin under `HERMES_HOME/plugins` (or `~/.hermes/plugins`), and enables it. It only manages the `agent-buzzer` plugin. It leaves other plugins and existing Codex notification settings alone. After changing the source, run `npm run install:local -- --force` to replace this plugin's installed copies.
+The installer packages three native adapters, registers local Codex and Copilot marketplaces, installs their plugins, copies a Hermes plugin under `HERMES_HOME/plugins` (or `~/.hermes/plugins`), and enables it. It only manages the `agent-buzzer` plugin. It leaves other plugins and existing Codex notification settings alone. After changing the source, run `npm run install:local -- --force` to replace this plugin's installed copies.
 
 - **Codex:** Review and trust the two new hooks in `/hooks` when prompted. The installed package includes `Stop` and `PermissionRequest`. Existing `notify` settings are not changed. Restart the desktop app to pick up newly installed hooks.
-- **Copilot CLI:** The package includes `agentStop` and `notification` hooks. The latter filters `permission_prompt` and `elicitation_dialog`. Native CLI plugin installs from local paths currently work but are deprecated upstream; future versions may need a plugin marketplace.
+- **Copilot CLI:** The package includes `agentStop` and `notification` hooks. The latter filters `permission_prompt` and `elicitation_dialog`. The installer registers the local `agent-buzzer-local` marketplace instead of relying on deprecated direct-path installs.
+- Copilot completion delivery runs in a short-lived background process because its final transcript can become readable only after `agentStop` returns. The card may arrive a few seconds after the CLI reply.
 - **Hermes:** A new CLI, TUI, Desktop, or gateway session picks up the enabled plugin. It observes `post_llm_call`, failed/interrupted `on_session_end`, and `pre_approval_request`.
 
-Copilot's standalone desktop app uses the CLI/SDK runtime, but its execution of installed CLI hooks has not been verified in this project. The Copilot CLI path has been tested end to end.
+Copilot's standalone desktop app uses the CLI/SDK runtime and has a separate **Customize > Plugins** view. Check whether `agent-buzzer-local` appears there and install the plugin if needed. The app's execution of these hooks has not yet been verified; the Copilot CLI path has been tested end to end. The app's marketplace UI may require a Git repository URL rather than a local filesystem path.
+
+Do not keep a separately installed direct `agent-buzzer` plugin alongside `agent-buzzer@agent-buzzer-local`: both would send a card for the same turn. The installer stops if it sees an old direct installation.
 
 ## Behavior
 

@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 import { buildCard } from "./card.mjs";
 import { configPath, loadConfig, readSettings } from "./config.mjs";
-import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes } from "./adapters.mjs";
+import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "./adapters.mjs";
 import { getTenantToken, sendCard } from "./feishu.mjs";
 import { saveSecret } from "./secret-store.mjs";
 
@@ -35,6 +36,32 @@ function saveSettings(settings) {
 
 export async function main(args) {
   const [command, ...rest] = args;
+  if (command === "copilot-stop") {
+    const input = await readInput();
+    const payload = Buffer.from(JSON.stringify({
+      transcriptPath: input.transcriptPath || input.transcript_path,
+      sessionId: input.sessionId || input.session_id,
+    })).toString("base64url");
+    const child = spawn(process.execPath, [process.argv[1], "copilot-finish", payload], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    await new Promise((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+    });
+    child.unref();
+    return;
+  }
+  if (command === "copilot-finish") {
+    const input = JSON.parse(Buffer.from(rest[0] || "", "base64url").toString("utf8"));
+    const reply = await waitForCopilotReply(input.transcriptPath);
+    const event = fromCopilotStop(input, reply);
+    const config = loadConfig();
+    await sendCard(config.feishu, buildCard(event, config.deviceName));
+    return;
+  }
   if (command === "set-device") {
     if (!rest[0]?.trim()) throw new Error("Usage: agent-buzzer set-device <name>");
     saveSettings({ ...readSettings(), deviceName: rest.join(" ").trim() });

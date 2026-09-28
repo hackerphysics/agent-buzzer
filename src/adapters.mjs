@@ -1,5 +1,6 @@
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { shortSummary } from "./card.mjs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 function text(value, fallback) {
   return shortSummary(value, fallback);
@@ -42,14 +43,23 @@ export function lastCopilotReply(transcriptPath) {
     readSync(file, bytes, 0, bytes.length, start);
     const lines = bytes.toString("utf8").split(/\r?\n/);
     if (start) lines.shift();
-    for (let i = lines.length - 1; i >= 0; i--) {
+    const parsed = [];
+    for (const line of lines) {
       try {
-        const event = JSON.parse(lines[i]);
+        parsed.push(JSON.parse(line));
+      } catch {
+        // The tail may begin or end in the middle of a JSONL record.
+      }
+    }
+    const lastStart = parsed.findLastIndex((event) => event.type === "assistant.turn_start");
+    for (let i = parsed.length - 1; i > lastStart; i--) {
+      try {
+        const event = parsed[i];
         if (event.type !== "assistant.message") continue;
         const value = contentText(event.data?.content);
         if (value.trim()) return value;
       } catch {
-        // An incomplete trailing JSONL record does not hide earlier messages.
+        // Ignore incomplete message payloads.
       }
     }
   } catch {
@@ -60,11 +70,21 @@ export function lastCopilotReply(transcriptPath) {
   return "";
 }
 
-export function fromCopilotStop(input) {
+export async function waitForCopilotReply(path, attempts = 80, delayMs = 150) {
+  if (!path) return "";
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const reply = lastCopilotReply(path);
+    if (reply) return reply;
+    await sleep(delayMs);
+  }
+  return "";
+}
+
+export function fromCopilotStop(input, reply = lastCopilotReply(input.transcriptPath || input.transcript_path)) {
   return {
     agent: "Copilot CLI",
     status: "completed",
-    summary: text(lastCopilotReply(input.transcriptPath || input.transcript_path), "本轮任务已结束"),
+    summary: text(reply, "本轮任务已结束"),
     key: input.sessionId || input.session_id,
   };
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildCard, shortSummary } from "../src/card.mjs";
-import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes } from "../src/adapters.mjs";
+import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "../src/adapters.mjs";
 import { sendCard } from "../src/feishu.mjs";
 
 test("card is an interactive Feishu card with device, status and short summary", () => {
@@ -26,7 +26,7 @@ test("Codex turn and approval events stay separate", () => {
   assert.equal(fromCodexPermission({ turn_id: "t1", tool_input: { description: "需要权限" } }).status, "needs_input");
 });
 
-test("Copilot reads only the last assistant reply from JSONL transcript", () => {
+test("Copilot reads only the last assistant reply from JSONL transcript", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-buzzer-test-"));
   try {
     const path = join(dir, "events.jsonl");
@@ -37,6 +37,13 @@ test("Copilot reads only the last assistant reply from JSONL transcript", () => 
     ].map((item) => JSON.stringify(item)).join("\n"));
     assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: path }).summary, "Final reply");
     assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: "missing" }).summary, "本轮任务已结束");
+    writeFileSync(path, JSON.stringify({ type: "assistant.turn_start", data: { turnId: "t2" } }) + "\n");
+    assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: path }).summary, "本轮任务已结束");
+    setTimeout(() => writeFileSync(path, [
+      { type: "assistant.turn_start", data: { turnId: "t2" } },
+      { type: "assistant.message", data: { content: "Delayed reply" } },
+    ].map((item) => JSON.stringify(item)).join("\n")), 60);
+    assert.equal(await waitForCopilotReply(path, 10, 20), "Delayed reply");
   } finally {
     if (dir.startsWith(`${tmpdir()}${process.platform === "win32" ? "\\" : "/"}agent-buzzer-test-`)) {
       rmSync(dir, { recursive: true, force: true });

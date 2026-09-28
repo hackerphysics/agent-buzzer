@@ -37,15 +37,24 @@ function installCodex(paths) {
 }
 
 function installCopilot(paths) {
+  const existing = JSON.parse(run("copilot", ["plugin", "list", "--json"], true));
+  if (existing.some((item) => item.name === "agent-buzzer" && !item.marketplace && item.source === "installed")) {
+    throw new Error("A legacy direct AgentBuzzer plugin is still installed. Uninstall it before enabling the marketplace copy.");
+  }
+  const marketplaces = JSON.parse(run("copilot", ["plugin", "marketplace", "list", "--json"], true));
+  if (!marketplaces.some((item) => item.name === "agent-buzzer-local")) {
+    run("copilot", ["plugin", "marketplace", "add", ROOT]);
+  }
   const list = JSON.parse(run("copilot", ["plugin", "list", "--json"], true));
-  const installed = list.find((item) => item.name === "agent-buzzer" && item.source === "installed");
+  const installed = list.find((item) => item.name === "agent-buzzer" && item.marketplace === "agent-buzzer-local");
   if (installed && !force) {
+    if (!installed.enabled) run("copilot", ["plugin", "enable", "agent-buzzer@agent-buzzer-local"]);
     console.log(`Copilot plugin already installed (${installed.version}); use --force to update.`);
     return;
   }
-  if (installed) run("copilot", ["plugin", "uninstall", "agent-buzzer"]);
-  run("copilot", ["plugin", "install", paths.copilot]);
-  console.log(`Copilot CLI ${version} installed.`);
+  if (installed) run("copilot", ["plugin", "uninstall", "agent-buzzer@agent-buzzer-local"]);
+  run("copilot", ["plugin", "install", "agent-buzzer@agent-buzzer-local"]);
+  console.log(`Copilot CLI ${version} installed from ${paths.copilot}.`);
 }
 
 function installHermes(paths) {
