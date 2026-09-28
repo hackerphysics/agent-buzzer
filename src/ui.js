@@ -226,6 +226,10 @@ async function refresh() {
     const data = await api("/api/state");
     $("connection").textContent = "服务运行中";
     $("connection").classList.add("online");
+    if ($("feedback").dataset.networkError === "true") {
+      $("feedback").textContent = "";
+      delete $("feedback").dataset.networkError;
+    }
     currentSettings = data.settings;
     if (!loaded) fill(data.settings);
     renderQueue(data.queue);
@@ -243,6 +247,7 @@ async function refresh() {
     $("connection").textContent = "服务不可用";
     $("connection").classList.remove("online");
     $("feedback").textContent = error.message;
+    $("feedback").dataset.networkError = "true";
   }
 }
 
