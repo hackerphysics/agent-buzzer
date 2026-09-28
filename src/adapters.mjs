@@ -82,7 +82,7 @@ export async function waitForCopilotReply(path, attempts = 80, delayMs = 150) {
 
 export function fromCopilotStop(input, reply = lastCopilotReply(input.transcriptPath || input.transcript_path)) {
   return {
-    agent: "Copilot CLI",
+    agent: "GitHub Copilot",
     status: "completed",
     summary: text(reply, "本轮任务已结束"),
     key: input.sessionId || input.session_id,
@@ -92,7 +92,7 @@ export function fromCopilotStop(input, reply = lastCopilotReply(input.transcript
 export function fromCopilotNotification(input) {
   if (!["permission_prompt", "elicitation_dialog"].includes(input.notification_type)) return null;
   return {
-    agent: "Copilot CLI",
+    agent: "GitHub Copilot",
     status: "needs_input",
     summary: text(input.message, "Copilot 正在等待你处理"),
     key: input.sessionId || input.session_id,

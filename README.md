@@ -1,6 +1,6 @@
 # AgentBuzzer
 
-AgentBuzzer sends a short Feishu interactive card when Codex, GitHub Copilot CLI, or Hermes Agent finishes a turn or requests human approval. Each card shows the Agent and the local device name. Feishu is the only delivery channel in this version.
+AgentBuzzer sends a short Feishu interactive card when Codex, GitHub Copilot, or Hermes Agent finishes a turn or requests human approval. Each card shows the Agent and the local device name. Feishu is the only delivery channel in this version.
 
 ## Requirements
 

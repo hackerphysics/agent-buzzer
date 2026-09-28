@@ -36,6 +36,7 @@ test("Copilot reads only the last assistant reply from JSONL transcript", async 
       { type: "assistant.turn_end", data: {} },
     ].map((item) => JSON.stringify(item)).join("\n"));
     assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: path }).summary, "Final reply");
+    assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: path }).agent, "GitHub Copilot");
     assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: "missing" }).summary, "本轮任务已结束");
     writeFileSync(path, JSON.stringify({ type: "assistant.turn_start", data: { turnId: "t2" } }) + "\n");
     assert.equal(fromCopilotStop({ sessionId: "s1", transcriptPath: path }).summary, "本轮任务已结束");
