@@ -67,7 +67,7 @@ if (single) app.whenReady().then(async () => {
     window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(`${url}/`)) event.preventDefault(); });
     await window.loadURL(url);
     window.on("closed", () => { window = null; });
-  } catch (error) { dialog.showErrorBox("AgentBuzzer", error.message); app.quit(); }
+  } catch (error) { console.error(error); dialog.showErrorBox("AgentBuzzer", error.message); app.quit(); }
 });
 
 app.on("window-all-closed", () => app.quit());
