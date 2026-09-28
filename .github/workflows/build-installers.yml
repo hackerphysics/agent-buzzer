@@ -20,11 +20,11 @@ jobs:
             platform: windows
             target: --win nsis --x64
             artifact: release/*.exe
-          - os: macos-latest
+          - os: macos-15-intel
             platform: macos-x64
             target: --mac dmg --x64
             artifact: release/*.dmg
-          - os: macos-15-arm64
+          - os: macos-15
             platform: macos-arm64
             target: --mac dmg --arm64
             artifact: release/*.dmg
