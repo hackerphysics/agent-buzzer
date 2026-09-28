@@ -3,13 +3,13 @@
   "owner": { "name": "AgentBuzzer" },
   "metadata": {
     "description": "Local AgentBuzzer notifications",
-    "version": "0.1.4"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "agent-buzzer",
-      "description": "Feishu completion and human-input cards",
-      "version": "0.1.4",
+      "description": "Completion and human-input notifications",
+      "version": "0.2.0",
       "source": "./dist/copilot-plugin"
     }
   ]

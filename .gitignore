@@ -1,6 +1,8 @@
 node_modules/
 coverage/
 dist/
+build/
+release/
 .agents/plugins/agent-buzzer/
 .env
 .env.*

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentBuzzer</title>
+  <link rel="stylesheet" href="/ui.css">
+  <script defer src="/ui.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="mark" aria-hidden="true">◈</span><strong>AgentBuzzer</strong><span class="device" id="device-label"></span></div>
+    <span class="connection" id="connection">连接中</span>
+  </header>
+  <main class="shell">
+    <nav class="navigation" aria-label="设置页面">
+      <button class="nav-item active" data-page="overview" type="button">概览</button>
+      <button class="nav-item" data-page="timing" type="button">时间策略</button>
+      <button class="nav-item" data-page="channels" type="button">通知通道</button>
+      <button class="nav-item" data-page="adapters" type="button">适配器</button>
+    </nav>
+    <div class="content">
+      <div class="heading"><div><h1 id="page-title">概览</h1><p id="summary">正在读取设置</p></div><button id="refresh" class="icon" type="button" title="刷新" aria-label="刷新">↻</button></div>
+      <p id="feedback" role="status" aria-live="polite"></p>
+      <div class="page" id="page-overview">
+        <section aria-labelledby="switches-title">
+          <div class="section-head"><h2 id="switches-title">发送控制</h2></div>
+          <div class="row strong"><div><b>通知</b><small>关闭后丢弃新事件及待发消息</small></div><label class="switch"><input type="checkbox" id="enabled"><span></span></label></div>
+          <div class="row"><div><b>勿扰</b><small>暂存消息，恢复后补发</small></div><label class="switch"><input type="checkbox" id="dnd"><span></span></label></div>
+        </section>
+        <section aria-labelledby="queue-title">
+          <div class="section-head"><h2 id="queue-title">待发消息 <span id="queue-count" class="count">0</span></h2></div>
+          <div id="queue" class="queue"></div>
+        </section>
+      </div>
+      <div class="page" id="page-timing" hidden>
+        <section aria-labelledby="timing-title">
+          <div class="section-head"><h2 id="timing-title">时间策略</h2></div>
+          <div class="row"><div><b>工作时段</b><small>时段外的新事件直接丢弃</small></div><label class="switch"><input type="checkbox" id="hours-enabled"><span></span></label></div>
+          <div class="timing-fields" id="hours-fields">
+            <div class="field-pair"><label>开始<input id="hours-start" type="time" required></label><label>结束<input id="hours-end" type="time" required></label></div>
+            <div class="weekdays" id="weekdays" aria-label="工作日"></div>
+          </div>
+          <div class="row"><div><b>Work / Break</b><small>Break 中的新事件重置休息计时</small></div><label class="switch"><input type="checkbox" id="cycle-enabled"><span></span></label></div>
+          <div class="timing-fields" id="cycle-fields"><div class="field-pair"><label>工作（分钟）<input id="work-minutes" type="number" min="1" max="1440"></label><label>休息（分钟）<input id="break-minutes" type="number" min="1" max="1440"></label></div><span id="phase" class="muted"></span></div>
+        </section>
+        <button id="save-timing" class="primary-button" type="button">保存时间策略</button>
+      </div>
+      <div class="page" id="page-channels" hidden>
+        <section aria-labelledby="channel-title">
+          <div class="section-head"><h2 id="channel-title">通知通道</h2></div>
+          <div class="fields">
+            <label>设备名称<input id="device-name" autocomplete="off"></label>
+          </div>
+          <div class="channel-block">
+            <div class="row"><div><b>飞书</b><small id="secret-state"></small></div><label class="switch"><input type="checkbox" id="feishu-enabled" aria-label="飞书通道"><span></span></label></div>
+            <div class="fields channel-fields" id="feishu-fields">
+              <label>App ID<input id="app-id" autocomplete="off"></label>
+              <label>接收者类型<select id="recipient-type"><option value="chat_id">chat_id</option><option value="open_id">open_id</option><option value="user_id">user_id</option><option value="email">email</option></select></label>
+              <label>接收者 ID<input id="recipient-id" autocomplete="off"></label>
+              <label>App Secret<input id="app-secret" type="password" autocomplete="new-password" placeholder="保持不变"></label>
+            </div>
+          </div>
+          <div class="channel-block">
+            <div class="row"><div><b>通用 Webhook</b><small id="webhook-state"></small></div><label class="switch"><input type="checkbox" id="webhook-enabled" aria-label="通用 Webhook 通道"><span></span></label></div>
+            <div class="fields channel-fields" id="webhook-fields"><label>HTTPS URL<input id="webhook-url" type="password" autocomplete="new-password" placeholder="保持不变"></label></div>
+          </div>
+          <div class="channel-block">
+            <div class="row"><div><b>Slack</b><small id="slack-state"></small></div><label class="switch"><input type="checkbox" id="slack-enabled" aria-label="Slack 通道"><span></span></label></div>
+            <div class="fields channel-fields" id="slack-fields"><label>Incoming Webhook URL<input id="slack-url" type="password" autocomplete="new-password" placeholder="保持不变"></label></div>
+          </div>
+          <button id="save" class="primary-button" type="button">保存通道设置</button>
+        </section>
+      </div>
+      <div class="page" id="page-adapters" hidden>
+        <section aria-labelledby="adapters-title">
+          <div class="section-head"><h2 id="adapters-title">Agent 适配器</h2></div>
+          <div class="agent-list" id="agent-list"></div>
+          <div id="adapters" class="adapters"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

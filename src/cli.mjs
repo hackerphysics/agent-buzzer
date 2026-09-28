@@ -1,11 +1,11 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { dirname } from "node:path";
 import { buildCard } from "./card.mjs";
-import { configPath, loadConfig, readSettings } from "./config.mjs";
+import { loadConfig, readSettings, saveSettings } from "./config.mjs";
 import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "./adapters.mjs";
-import { getTenantToken, sendCard } from "./feishu.mjs";
+import { getTenantToken } from "./feishu.mjs";
 import { saveSecret } from "./secret-store.mjs";
+import { ensureService, submitEvent } from "./client.mjs";
+import { BASE_URL, createService } from "./service.mjs";
 
 const ADAPTERS = {
   "codex-stop": fromCodexStop,
@@ -28,14 +28,25 @@ async function readInput() {
   return JSON.parse((await readInputText()) || "{}");
 }
 
-function saveSettings(settings) {
-  const path = configPath();
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+function updateFeishu(values) {
+  const settings = readSettings();
+  const feishu = { ...(settings.channels?.feishu || settings.feishu), ...values };
+  saveSettings({ ...settings, channels: { ...settings.channels, feishu } });
 }
 
 export async function main(args) {
   const [command, ...rest] = args;
+  if (command === "serve") {
+    const service = createService();
+    await service.start();
+    console.log(`AgentBuzzer running at ${BASE_URL}`);
+    return;
+  }
+  if (command === "ui") {
+    await ensureService();
+    console.log(BASE_URL);
+    return;
+  }
   if (command === "copilot-stop") {
     const input = await readInput();
     const payload = Buffer.from(JSON.stringify({
@@ -58,8 +69,7 @@ export async function main(args) {
     const input = JSON.parse(Buffer.from(rest[0] || "", "base64url").toString("utf8"));
     const reply = await waitForCopilotReply(input.transcriptPath);
     const event = fromCopilotStop(input, reply);
-    const config = loadConfig();
-    await sendCard(config.feishu, buildCard(event, config.deviceName));
+    await submitEvent(event);
     return;
   }
   if (command === "set-device") {
@@ -72,22 +82,20 @@ export async function main(args) {
     if (!["open_id", "chat_id", "user_id", "email"].includes(rest[0]) || !rest[1]) {
       throw new Error("Usage: agent-buzzer set-recipient <open_id|chat_id|user_id|email> <id>");
     }
-    const settings = readSettings();
-    saveSettings({ ...settings, feishu: { ...settings.feishu, receiveIdType: rest[0], receiveId: rest[1] } });
+    updateFeishu({ receiveIdType: rest[0], receiveId: rest[1] });
     console.log("Feishu recipient saved outside the repository.");
     return;
   }
   if (command === "set-app-id") {
     if (!rest[0]) throw new Error("Usage: agent-buzzer set-app-id <id>");
-    const settings = readSettings();
-    saveSettings({ ...settings, feishu: { ...settings.feishu, appId: rest[0] } });
+    updateFeishu({ appId: rest[0] });
     console.log("Feishu App ID saved outside the repository.");
     return;
   }
   if (command === "store-secret") {
     const secret = (await readInputText()).trim();
     saveSecret(secret);
-    console.log("Feishu App Secret encrypted for this Windows user.");
+    console.log("Feishu App Secret stored in this user's credential store.");
     return;
   }
   if (command === "doctor") {
@@ -97,6 +105,8 @@ export async function main(args) {
       feishuAppIdConfigured: Boolean(config.feishu.appId),
       feishuAppSecretConfigured: Boolean(config.feishu.appSecret),
       feishuRecipientConfigured: Boolean(config.feishu.receiveId),
+      channels: Object.fromEntries(Object.entries(config.channels).map(([name, value]) => [name, { enabled: value.enabled, configured: name === "feishu" ? Boolean(value.appId && value.appSecret && value.receiveId) : Boolean(value.url) }])),
+      notifications: config.notifications,
     }, null, 2));
     return;
   }
@@ -112,16 +122,15 @@ export async function main(args) {
       console.log(JSON.stringify(card, null, 2));
       return;
     }
-    await sendCard(config.feishu, card);
-    console.log("Feishu interactive card sent.");
+    const result = await submitEvent({ agent: "AgentBuzzer", status: "completed", summary: "这是一条测试通知。" });
+    console.log(`Test event ${result.disposition}.`);
     return;
   }
   const adapt = ADAPTERS[command];
-  if (!adapt) throw new Error("Usage: agent-buzzer <doctor|set-device|set-app-id|store-secret|set-recipient|check-token|test-card|codex-stop|codex-permission|copilot-stop|copilot-notification|hermes-event>");
+  if (!adapt) throw new Error("Usage: agent-buzzer <ui|serve|doctor|set-device|set-app-id|store-secret|set-recipient|check-token|test-card|codex-stop|codex-permission|copilot-stop|copilot-notification|hermes-event>");
   const event = adapt(await readInput());
   if (event) {
-    const config = loadConfig();
-    await sendCard(config.feishu, buildCard(event, config.deviceName));
+    await submitEvent(event);
   }
   if (command.startsWith("codex-")) process.stdout.write("{}\n");
 }

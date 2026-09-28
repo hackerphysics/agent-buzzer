@@ -6,6 +6,7 @@ import subprocess
 
 
 ENTRY = Path(__file__).resolve().parent / "bin" / "agent-buzzer.mjs"
+NODE_BINARY = "node"
 
 
 def _send(status, summary, session_id=None, turn_id=None):
@@ -17,7 +18,7 @@ def _send(status, summary, session_id=None, turn_id=None):
     }
     try:
         subprocess.run(
-            ["node", str(ENTRY), "hermes-event"],
+            [NODE_BINARY, str(ENTRY), "hermes-event"],
             input=json.dumps(payload),
             text=True,
             stdout=subprocess.DEVNULL,

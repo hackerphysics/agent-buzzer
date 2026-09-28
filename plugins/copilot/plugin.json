@@ -1,6 +1,6 @@
 {
   "name": "agent-buzzer",
-  "version": "0.1.4",
-  "description": "AgentBuzzer Feishu turn and human-input notifications",
+  "version": "0.2.0",
+  "description": "AgentBuzzer turn and human-input notifications",
   "hooks": "hooks/hooks.json"
 }

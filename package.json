@@ -1,17 +1,42 @@
 {
   "name": "agent-buzzer",
-  "version": "0.1.4",
+  "version": "0.2.0",
+  "description": "Local notification service for coding agents",
+  "author": "hackerphysics",
   "private": true,
   "type": "module",
+  "main": "desktop/main.cjs",
   "bin": {
     "agent-buzzer": "./bin/agent-buzzer.mjs"
   },
   "scripts": {
     "test": "node --test",
     "pack:plugins": "node scripts/package-plugins.mjs",
-    "install:local": "node scripts/install.mjs"
+    "install:local": "node scripts/install.mjs",
+    "ui": "node bin/agent-buzzer.mjs ui",
+    "serve": "node bin/agent-buzzer.mjs serve",
+    "stage": "node scripts/stage-app.mjs",
+    "build:installers": "npm run stage && electron-builder --publish never"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^41.10.7",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "dev.agentbuzzer.app",
+    "productName": "AgentBuzzer",
+    "asar": true,
+    "files": ["desktop/**/*", "package.json"],
+    "extraResources": [{ "from": "build/app", "to": "agent-buzzer" }],
+    "directories": { "output": "release" },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "forceCodeSigning": false,
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "perMachine": false },
+    "mac": { "target": "dmg", "identity": null },
+    "linux": { "target": "deb", "category": "Utility" }
   }
 }
