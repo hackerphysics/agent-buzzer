@@ -1,0 +1,13 @@
+{
+  "name": "agent-buzzer-local",
+  "plugins": [
+    {
+      "name": "agent-buzzer",
+      "description": "Notify via Feishu when Codex finishes or needs approval",
+      "source": {
+        "source": "local",
+        "path": "./.agents/plugins/agent-buzzer"
+      }
+    }
+  ]
+}

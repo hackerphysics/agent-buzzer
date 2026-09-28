@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/agent-buzzer.mjs\" codex-stop",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\bin\\agent-buzzer.mjs\" codex-stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/bin/agent-buzzer.mjs\" codex-permission",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\bin\\agent-buzzer.mjs\" codex-permission",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

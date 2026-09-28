@@ -1,0 +1,8 @@
+node_modules/
+coverage/
+dist/
+.agents/plugins/agent-buzzer/
+.env
+.env.*
+config.json
+*.log

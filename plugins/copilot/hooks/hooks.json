@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "hooks": {
+    "agentStop": [
+      {
+        "type": "command",
+        "exec": "node",
+        "args": ["__AGENTBUZZER_ENTRY__", "copilot-stop"],
+        "timeoutSec": 15
+      }
+    ],
+    "notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "type": "command",
+        "exec": "node",
+        "args": ["__AGENTBUZZER_ENTRY__", "copilot-notification"],
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

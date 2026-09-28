@@ -1,0 +1,17 @@
+{
+  "name": "agent-buzzer",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agent-buzzer": "./bin/agent-buzzer.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "pack:plugins": "node scripts/package-plugins.mjs",
+    "install:local": "node scripts/install.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "agent-buzzer",
+  "version": "0.1.4",
+  "description": "AgentBuzzer Feishu turn and approval notifications",
+  "hooks": "./hooks/hooks.json"
+}
