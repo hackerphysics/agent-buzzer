@@ -37,6 +37,6 @@
     "win": { "target": "nsis" },
     "nsis": { "oneClick": false, "perMachine": false },
     "mac": { "target": "dmg", "identity": null },
-    "linux": { "target": "deb", "category": "Utility" }
+    "linux": { "target": "deb", "category": "Utility", "maintainer": "hackerphysics <hackerphysics@users.noreply.github.com>" }
   }
 }
