@@ -213,6 +213,9 @@ test("local API keeps URLs private and applies immediate discard through HTTP", 
   assert.equal((await accepted.json()).disposition, "queued");
   const state = await (await fetch(`${url}/api/state`)).text();
   assert.doesNotMatch(state, /secret-token|test-secret/);
+  const icon = await fetch(`${url}/icon.svg`);
+  assert.match(icon.headers.get("content-type"), /image\/svg\+xml/);
+  assert.match(await icon.text(), /AgentBuzzer/);
   const updated = await fetch(`${url}/api/settings`, {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ notifications: { ...n, enabled: false } }),

@@ -17,7 +17,7 @@ const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).ver
 const BUILD_ID = buildId(ROOT);
 export const PORT = Number(process.env.AGENTBUZZER_PORT || 38147);
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
-const UI_FILES = new Map([["/", "ui.html"], ["/ui.css", "ui.css"], ["/ui.js", "ui.js"]]);
+const UI_FILES = new Map([["/", "ui.html"], ["/ui.css", "ui.css"], ["/ui.js", "ui.js"], ["/icon.svg", "icon.svg"]]);
 const ADAPTER_AGENTS = { codex: "Codex", copilot: "GitHub Copilot", hermes: "Hermes" };
 
 function json(response, status, data) {
@@ -264,7 +264,7 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
       if (request.method === "GET" && UI_FILES.has(url.pathname)) {
         const name = UI_FILES.get(url.pathname);
         response.writeHead(200, {
-          "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : name.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8",
+          "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : name.endsWith(".js") ? "text/javascript; charset=utf-8" : name.endsWith(".svg") ? "image/svg+xml" : "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
           "X-Content-Type-Options": "nosniff",
         });

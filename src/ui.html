@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AgentBuzzer</title>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="stylesheet" href="/ui.css">
   <script defer src="/ui.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="mark" aria-hidden="true">◈</span><strong>AgentBuzzer</strong><span class="device" id="device-label"></span></div>
-    <span class="connection" id="connection">连接中</span>
-  </header>
   <main class="shell">
-    <nav class="navigation" aria-label="设置页面">
-      <button class="nav-item active" data-page="overview" type="button">概览</button>
-      <button class="nav-item" data-page="timing" type="button">时间策略</button>
-      <button class="nav-item" data-page="channels" type="button">通知通道</button>
-      <button class="nav-item" data-page="adapters" type="button">适配器</button>
-    </nav>
+    <aside class="sidebar">
+      <div class="brand"><img src="/icon.svg" alt="" width="32" height="32"><strong>AgentBuzzer</strong></div>
+      <nav class="navigation" aria-label="设置页面">
+        <button class="nav-item active" data-page="overview" type="button">概览</button>
+        <button class="nav-item" data-page="timing" type="button">时间策略</button>
+        <button class="nav-item" data-page="channels" type="button">通知通道</button>
+        <button class="nav-item" data-page="adapters" type="button">适配器</button>
+      </nav>
+    </aside>
     <div class="content">
-      <div class="heading"><div><h1 id="page-title">概览</h1><p id="summary">正在读取设置</p></div><button id="refresh" class="icon" type="button" title="刷新" aria-label="刷新">↻</button></div>
+      <div class="heading"><div><h1 id="page-title">概览</h1><p id="summary">正在读取设置</p></div><div class="heading-actions"><span class="connection" id="connection">连接中</span><button id="refresh" class="icon" type="button" title="刷新" aria-label="刷新">↻</button></div></div>
       <p id="feedback" role="status" aria-live="polite"></p>
       <div class="page" id="page-overview">
         <section aria-labelledby="switches-title">
@@ -34,8 +34,7 @@
         </section>
       </div>
       <div class="page" id="page-timing" hidden>
-        <section aria-labelledby="timing-title">
-          <div class="section-head"><h2 id="timing-title">时间策略</h2></div>
+        <section aria-label="时间策略设置">
           <div class="row"><div><b>工作时段</b><small>时段外的新事件直接丢弃</small></div><label class="switch"><input type="checkbox" id="hours-enabled"><span></span></label></div>
           <div class="timing-fields" id="hours-fields">
             <div class="field-pair"><label>开始<input id="hours-start" type="time" required></label><label>结束<input id="hours-end" type="time" required></label></div>
@@ -47,8 +46,7 @@
         <button id="save-timing" class="primary-button" type="button">保存时间策略</button>
       </div>
       <div class="page" id="page-channels" hidden>
-        <section aria-labelledby="channel-title">
-          <div class="section-head"><h2 id="channel-title">通知通道</h2></div>
+        <section aria-label="通知通道设置">
           <div class="fields">
             <label>设备名称<input id="device-name" autocomplete="off"></label>
           </div>
@@ -73,8 +71,7 @@
         </section>
       </div>
       <div class="page" id="page-adapters" hidden>
-        <section aria-labelledby="adapters-title">
-          <div class="section-head"><h2 id="adapters-title">Agent 适配器</h2></div>
+        <section aria-label="Agent 适配器">
           <div class="agent-list" id="agent-list"></div>
           <div id="adapters" class="adapters"></div>
           <details id="codex-guide" class="setup-guide" hidden>

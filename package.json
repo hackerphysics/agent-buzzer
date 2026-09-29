@@ -1,6 +1,6 @@
 {
   "name": "agent-buzzer",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Local notification service for coding agents",
   "author": "hackerphysics",
   "private": true,
@@ -22,6 +22,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "electron": "^41.10.7",
     "electron-builder": "^26.0.12"
   },
@@ -34,9 +35,9 @@
     "directories": { "output": "release" },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "forceCodeSigning": false,
-    "win": { "target": "nsis" },
+    "win": { "target": "nsis", "icon": "build/icon.png" },
     "nsis": { "oneClick": false, "perMachine": false },
-    "mac": { "target": "dmg", "identity": null },
-    "linux": { "target": "deb", "category": "Utility", "maintainer": "hackerphysics <hackerphysics@users.noreply.github.com>" }
+    "mac": { "target": "dmg", "identity": null, "icon": "build/icon.png" },
+    "linux": { "target": "deb", "category": "Utility", "icon": "build/icons", "maintainer": "hackerphysics <hackerphysics@users.noreply.github.com>" }
   }
 }

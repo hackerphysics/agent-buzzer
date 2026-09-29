@@ -12,6 +12,8 @@ After installing or updating the Codex adapter, the app opens a short Hook-autho
 
 The **Adapters** page can also remove each AgentBuzzer plugin individually after confirmation. This leaves the AgentBuzzer service, other adapters, channel settings, and marketplace registrations intact, but discards that Agent's pending notifications. Restart an already-open Agent session to unload hooks it may have cached.
 
+The app icon is maintained in `src/icon.svg`; `npm run stage` renders the desktop and Linux icon sizes before packaging. Windows and Linux remove Electron's default in-window menu bar. macOS retains the operating system's global application menu.
+
 Unsigned Windows and macOS installers can show operating-system trust warnings. Signing/notarization requires certificates that are not included in this repository.
 
 To run from source with Node.js 20 or newer:

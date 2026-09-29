@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, Menu } = require("electron");
 const { spawn } = require("node:child_process");
 const { chmodSync, cpSync, existsSync, mkdirSync, readFileSync } = require("node:fs");
 const { homedir } = require("node:os");
@@ -58,11 +58,15 @@ async function launchService() {
 if (single) app.whenReady().then(async () => {
   try {
     await launchService();
+    if (process.platform !== "darwin") Menu.setApplicationMenu(null);
     window = new BrowserWindow({
       width: 1080, height: 780, minWidth: 360, minHeight: 480,
       title: "AgentBuzzer", backgroundColor: "#f5f7f6",
+      icon: join(process.resourcesPath, "agent-buzzer", "src", "icon.png"),
+      autoHideMenuBar: true,
       webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
     });
+    if (process.platform !== "darwin") window.removeMenu();
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(`${url}/`)) event.preventDefault(); });
     await window.loadURL(url);

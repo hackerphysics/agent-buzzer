@@ -64,7 +64,6 @@ function renderChoices(settings) {
 }
 
 function fill(settings) {
-  $("device-label").textContent = settings.deviceName;
   $("enabled").checked = settings.notifications.enabled;
   $("dnd").checked = settings.notifications.dnd;
   $("hours-enabled").checked = settings.notifications.workHours.enabled;
