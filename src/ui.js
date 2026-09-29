@@ -4,6 +4,7 @@ const weekdays = [[1, "一"], [2, "二"], [3, "三"], [4, "四"], [5, "五"], [6
 let loaded = false;
 let saving = false;
 let currentSettings;
+let pendingRemoval;
 const pageTitles = { overview: "概览", timing: "时间策略", channels: "通知通道", adapters: "适配器" };
 let currentPage = pageTitles[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
 
@@ -234,10 +235,41 @@ function renderAdapters(adapters) {
       actions.append(guideButton);
     }
     actions.append(button);
+    if (status.installed) {
+      const removeButton = element("button", "remove-button", "移除");
+      removeButton.type = "button";
+      removeButton.disabled = !status.available;
+      removeButton.addEventListener("click", () => {
+        pendingRemoval = { key, name, button: removeButton };
+        $("remove-title").textContent = `移除 ${name} 适配器？`;
+        $("remove-details").textContent = `只移除 ${name} 中的 AgentBuzzer 插件，并丢弃该 Agent 的待发消息。其他适配器和通知通道保持不变；已有会话可能要重启 ${name} 才会停止旧 Hook。`;
+        $("remove-dialog").returnValue = "";
+        $("remove-dialog").showModal();
+      });
+      actions.append(removeButton);
+    }
     row.append(left, actions);
     container.append(row);
   }
 }
+
+$("remove-dialog").addEventListener("close", async () => {
+  const target = pendingRemoval;
+  pendingRemoval = null;
+  if ($("remove-dialog").returnValue !== "remove" || !target) return;
+  target.button.disabled = true;
+  target.button.textContent = "移除中…";
+  try {
+    const result = await api(`/api/uninstall/${target.key}`, { method: "POST" });
+    const count = result.discarded ? `，丢弃 ${result.discarded} 条待发消息` : "";
+    $("feedback").textContent = result.removed ? `${target.name} 适配器已移除${count}` : `${target.name} 未安装${count}`;
+    await refresh();
+  } catch (error) {
+    $("feedback").textContent = error.message;
+    target.button.disabled = false;
+    target.button.textContent = "移除";
+  }
+});
 
 async function refresh() {
   try {

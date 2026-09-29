@@ -11,6 +11,7 @@ test("native plugin bundles contain self-sufficient service and local hook paths
     assert.ok(existsSync(join(path, "bin", "agent-buzzer.mjs")));
     assert.ok(existsSync(join(path, "src", "feishu.mjs")));
     assert.ok(existsSync(join(path, "scripts", "install.mjs")));
+    assert.ok(existsSync(join(path, "scripts", "uninstall.mjs")));
     assert.ok(existsSync(join(path, "package.json")));
     assert.ok(existsSync(join(path, ".github", "plugin", "marketplace.json")));
     await import(pathToFileURL(join(path, "src", "service.mjs")));

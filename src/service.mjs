@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { AGENTS, CHANNELS, loadConfig, readSettings, saveSettings } from "./config.mjs";
 import { activeChannels, sendChannel, validateEndpoint } from "./channels.mjs";
 import { advanceCycle, deliveryDecision, ingressDecision, resetBreak, validateNotifications } from "./policy.mjs";
-import { dataPath, listEntries, makeEntry, persistEntry, purgeDisabled, removeEntry, updateEntry } from "./queue.mjs";
+import { dataPath, listEntries, makeEntry, persistEntry, purgeAgent, purgeDisabled, removeEntry, updateEntry } from "./queue.mjs";
 import { saveSecret } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
 
@@ -18,6 +18,7 @@ const BUILD_ID = buildId(ROOT);
 export const PORT = Number(process.env.AGENTBUZZER_PORT || 38147);
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
 const UI_FILES = new Map([["/", "ui.html"], ["/ui.css", "ui.css"], ["/ui.js", "ui.js"]]);
+const ADAPTER_AGENTS = { codex: "Codex", copilot: "GitHub Copilot", hermes: "Hermes" };
 
 function json(response, status, data) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
@@ -91,7 +92,7 @@ async function adapterStatus() {
       const list = JSON.parse(await runCommand(program, args, 6000));
       results[agent] = { available: true, installed: agent === "codex"
         ? Boolean(list.installed?.some((item) => item.pluginId === "agent-buzzer@agent-buzzer-local"))
-        : Boolean(list.some((item) => item.name === "agent-buzzer" && item.enabled !== false)) };
+        : Boolean(list.some((item) => item.name === "agent-buzzer" && item.marketplace === "agent-buzzer-local" && item.enabled !== false)) };
     } catch {
       results[agent] = { available: false, installed: false };
     }
@@ -99,16 +100,21 @@ async function adapterStatus() {
   const home = process.env.HERMES_HOME || join(homedir(), ".hermes");
   let hermesAvailable = false;
   try { await runCommand("hermes", ["--version"], 6000); hermesAvailable = true; } catch { /* CLI not installed. */ }
-  results.hermes = { available: hermesAvailable, installed: existsSync(join(home, "plugins", "agent-buzzer", "plugin.yaml")) };
+  const manifest = join(home, "plugins", "agent-buzzer", "plugin.yaml");
+  let hermesInstalled = false;
+  try { hermesInstalled = /^name:\s*agent-buzzer\s*$/m.test(readFileSync(manifest, "utf8")); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  results.hermes = { available: hermesAvailable, installed: hermesInstalled };
   return results;
 }
 
-export function createService({ env = process.env, deliver = sendChannel, now = () => new Date(), intervalMs = 1000 } = {}) {
+export function createService({ env = process.env, deliver = sendChannel, uninstall = async (agent) => JSON.parse(await runCommand(process.execPath, [join(ROOT, "scripts", "uninstall.mjs"), `--${agent}`])), now = () => new Date(), intervalMs = 1000 } = {}) {
   let cycle = readCycle(env);
   let working = false;
   let closing = false;
   let tickTimer;
   let statusCache = { time: 0, value: null };
+  const uninstallingAgents = new Set();
 
   function syncCycle() {
     const next = advanceCycle(loadConfig(env).notifications.cycle, cycle, now().getTime());
@@ -124,6 +130,7 @@ export function createService({ env = process.env, deliver = sendChannel, now = 
     try {
       syncCycle();
       for (const entry of listEntries(env)) {
+        if (uninstallingAgents.has(entry.event.agent)) continue;
         const config = loadConfig(env);
         const decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
         if (decision === "drop") { removeEntry(entry); continue; }
@@ -224,6 +231,23 @@ export function createService({ env = process.env, deliver = sendChannel, now = 
     };
   }
 
+  async function removeAdapter(agent) {
+    const name = ADAPTER_AGENTS[agent];
+    if (!name) throw new Error("Unsupported adapter");
+    if (uninstallingAgents.has(name)) throw new Error("Adapter removal is already running");
+    uninstallingAgents.add(name);
+    try {
+      const result = await uninstall(agent);
+      if (typeof result?.removed !== "boolean") throw new Error("Invalid uninstall result");
+      while (working) await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+      return { ...result, discarded: purgeAgent(name, env) };
+    } finally {
+      uninstallingAgents.delete(name);
+      statusCache.time = 0;
+      void pump().catch((error) => console.error(`AgentBuzzer: ${error.message}`));
+    }
+  }
+
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, BASE_URL);
@@ -255,6 +279,9 @@ export function createService({ env = process.env, deliver = sendChannel, now = 
         statusCache.time = 0;
         return json(response, 200, { output: output.trim() });
       }
+      if (request.method === "POST" && /^\/api\/uninstall\/(codex|copilot|hermes)$/.test(url.pathname)) {
+        return json(response, 200, await removeAdapter(url.pathname.split("/").at(-1)));
+      }
       return json(response, 404, { error: "Not found" });
     } catch (error) {
       return json(response, 400, { error: error.message });
@@ -262,7 +289,7 @@ export function createService({ env = process.env, deliver = sendChannel, now = 
   });
 
   const service = {
-    accept, pump, snapshot, updateSettings,
+    accept, pump, snapshot, updateSettings, removeAdapter,
     async start(port = PORT) {
       await new Promise((resolvePromise, reject) => {
         server.once("error", reject);

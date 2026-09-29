@@ -10,6 +10,8 @@ On first launch the desktop app copies its service and runtime to `~/.agent-buzz
 
 After installing or updating the Codex adapter, the app opens a short Hook-authorization guide. Restart Codex, open `/hooks` in a new conversation, review and trust AgentBuzzer's `Stop` and `PermissionRequest` hooks, then finish a test turn. You can reopen the guide from the Codex adapter row. An installed plugin is not proof that Codex has trusted its hooks; the app never grants that trust on your behalf.
 
+The **Adapters** page can also remove each AgentBuzzer plugin individually after confirmation. This leaves the AgentBuzzer service, other adapters, channel settings, and marketplace registrations intact, but discards that Agent's pending notifications. Restart an already-open Agent session to unload hooks it may have cached.
+
 Unsigned Windows and macOS installers can show operating-system trust warnings. Signing/notarization requires certificates that are not included in this repository.
 
 To run from source with Node.js 20 or newer:

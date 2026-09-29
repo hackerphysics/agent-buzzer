@@ -79,3 +79,13 @@ export function purgeDisabled(notifications, channels, env = process.env) {
   }
   return count;
 }
+
+export function purgeAgent(agent, env = process.env) {
+  let count = 0;
+  for (const entry of listEntries(env)) {
+    if (entry.event.agent !== agent) continue;
+    removeEntry(entry);
+    count++;
+  }
+  return count;
+}

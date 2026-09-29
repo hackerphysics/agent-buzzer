@@ -64,6 +64,8 @@ input:focus, select:focus { border-color: #08745b; box-shadow: 0 0 0 2px #b9ded1
 .icon { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #cbd7d0; background: #fff; border-radius: 4px; font-size: 21px; color: #476359; }
 .adapter-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #e0e6e3; padding: 13px 0; }
 .adapter-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.remove-button { border: 0; background: transparent; color: #9b3434; padding: 7px 3px; white-space: nowrap; }
+.remove-button:hover { text-decoration: underline; }
 .text-button { border: 0; background: transparent; color: #08745b; padding: 7px 3px; white-space: nowrap; }
 .text-button:hover { text-decoration: underline; }
 .setup-guide { border-left: 3px solid #bb801c; padding: 6px 0 5px 16px; margin: 24px 0 0; }
@@ -73,6 +75,13 @@ input:focus, select:focus { border-color: #08745b; box-shadow: 0 0 0 2px #b9ded1
 .setup-guide li + li { margin-top: 7px; }
 .setup-guide p { color: #66726e; margin: 9px 0 3px; font-size: 12px; }
 .setup-guide code { color: #175944; background: #e3eee8; border-radius: 3px; padding: 1px 4px; }
+dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid #cbd7d0; border-radius: 6px; background: #fff; color: #20282a; padding: 22px; box-shadow: 0 16px 48px #18261f33; }
+dialog::backdrop { background: #18261f70; }
+dialog p { line-height: 1.6; color: #56645d; margin: 12px 0 22px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.danger-button { border: 1px solid #a53b3b; border-radius: 4px; background: #a53b3b; color: #fff; padding: 7px 14px; min-height: 36px; }
+.danger-button:hover { background: #892e2e; }
+.remove-button:focus-visible, .danger-button:focus-visible { outline: 2px solid #a53b3b; outline-offset: 3px; }
 #feedback { color: #49675c; min-height: 18px; margin: -12px 0 14px; font-size: 12px; overflow-wrap: anywhere; }
 @media (max-width: 780px) { .topbar { padding: 0 18px; } .shell { display: block; padding: 0 18px 60px; } .navigation { position: static; flex-direction: row; gap: 0; overflow-x: auto; border-bottom: 1px solid #dce3e0; margin: 0 -18px 24px; padding: 0 10px; } .nav-item { flex: 0 0 auto; border-radius: 0; border-bottom: 2px solid transparent; padding: 14px 12px 12px; } .nav-item.active { background: none; border-color: #08745b; } .content { max-width: none; } }
 @media (max-width: 420px) { .device { display: none; } .field-pair { gap: 8px; } .queue-top { flex-direction: column; gap: 3px; } }
