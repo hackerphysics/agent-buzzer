@@ -77,6 +77,15 @@
           <div class="section-head"><h2 id="adapters-title">Agent 适配器</h2></div>
           <div class="agent-list" id="agent-list"></div>
           <div id="adapters" class="adapters"></div>
+          <details id="codex-guide" class="setup-guide" hidden>
+            <summary>Codex Hook 启用步骤</summary>
+            <ol>
+              <li>重新打开 Codex，在新会话中输入 <code>/hooks</code>。</li>
+              <li>逐项查看并信任 AgentBuzzer 的 <code>Stop</code> 和 <code>PermissionRequest</code> Hook。</li>
+              <li>再完成一轮对话，确认收到通知。</li>
+            </ol>
+            <p>安装插件不等于授权 Hook。更新后若 Hook 定义发生变化，Codex 会要求重新审查。</p>
+          </details>
         </section>
       </div>
     </div>

@@ -3,13 +3,13 @@
   "owner": { "name": "AgentBuzzer" },
   "metadata": {
     "description": "Local AgentBuzzer notifications",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "plugins": [
     {
       "name": "agent-buzzer",
       "description": "Completion and human-input notifications",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "source": "./dist/copilot-plugin"
     }
   ]

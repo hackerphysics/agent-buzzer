@@ -197,9 +197,18 @@ function renderQueue(queue) {
   }
 }
 
+function showCodexGuide() {
+  const guide = $("codex-guide");
+  guide.hidden = false;
+  guide.open = true;
+  guide.querySelector("summary").focus();
+  guide.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 function renderAdapters(adapters) {
   const container = $("adapters");
   container.replaceChildren();
+  $("codex-guide").hidden = !adapters?.codex?.installed;
   for (const [name, key] of agentNames) {
     const status = adapters?.[key] || { available: false, installed: false };
     const row = element("div", "adapter-row");
@@ -212,11 +221,20 @@ function renderAdapters(adapters) {
       button.textContent = "处理中…";
       try {
         await api(`/api/install/${key}`, { method: "POST" });
-        $("feedback").textContent = `${name} 适配器已安装`;
+        $("feedback").textContent = key === "codex" ? "Codex 插件已安装，请在 Codex 中审查 Hook" : `${name} 适配器已安装`;
         await refresh();
+        if (key === "codex") showCodexGuide();
       } catch (error) { $("feedback").textContent = error.message; button.disabled = false; button.textContent = "重试"; }
     });
-    row.append(left, button);
+    const actions = element("div", "adapter-actions");
+    if (key === "codex" && status.installed) {
+      const guideButton = element("button", "text-button", "授权步骤");
+      guideButton.type = "button";
+      guideButton.addEventListener("click", showCodexGuide);
+      actions.append(guideButton);
+    }
+    actions.append(button);
+    row.append(left, actions);
     container.append(row);
   }
 }

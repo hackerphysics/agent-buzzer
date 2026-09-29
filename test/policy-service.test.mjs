@@ -228,7 +228,7 @@ test("service health reports version and supports graceful replacement", async (
   const url = `http://127.0.0.1:${port}`;
   const health = await (await fetch(`${url}/health`)).json();
   assert.equal(health.service, "agent-buzzer");
-  assert.equal(health.version, "0.2.0");
+  assert.equal(health.version, JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version);
   const response = await fetch(`${url}/api/shutdown`, { method: "POST" });
   assert.equal((await response.json()).stopped, true);
   await eventually(async () => {

@@ -8,6 +8,8 @@ GitHub Actions builds an unsigned Windows NSIS `.exe`, macOS Intel and Apple Sil
 
 On first launch the desktop app copies its service and runtime to `~/.agent-buzzer/app-<version>-<build-id>` and starts a local service at `http://127.0.0.1:38147`. Use the **Adapters** page to install or update each Agent's plugin. Installed hooks use the bundled runtime and start the service automatically if it is not running. Quit the desktop window without stopping the notification service.
 
+After installing or updating the Codex adapter, the app opens a short Hook-authorization guide. Restart Codex, open `/hooks` in a new conversation, review and trust AgentBuzzer's `Stop` and `PermissionRequest` hooks, then finish a test turn. You can reopen the guide from the Codex adapter row. An installed plugin is not proof that Codex has trusted its hooks; the app never grants that trust on your behalf.
+
 Unsigned Windows and macOS installers can show operating-system trust warnings. Signing/notarization requires certificates that are not included in this repository.
 
 To run from source with Node.js 20 or newer:
