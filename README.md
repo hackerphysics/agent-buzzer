@@ -10,6 +10,10 @@ On first launch the desktop app copies its service and runtime to `~/.agent-buzz
 
 After installing or updating the Codex adapter, the app opens a short Hook-authorization guide. Restart Codex, open `/hooks` in a new conversation, review and trust AgentBuzzer's `Stop` and `PermissionRequest` hooks, then finish a test turn. You can reopen the guide from the Codex adapter row. An installed plugin is not proof that Codex has trusted its hooks; the app never grants that trust on your behalf.
 
+On Windows, generated Codex hooks use an explicit PowerShell launcher so they work both in PowerShell sessions and under `cmd.exe`. The UTF-16 encoded command protects executable paths containing spaces or apostrophes and preserves hook stdin. Changing the launcher requires reviewing the two hooks again.
+
+Codex hook diagnostics are written to `~/.agent-buzzer/codex-hook.log` (beside the settings file when `AGENTBUZZER_CONFIG` is set). Logs contain timestamps, hook commands, completion states, and safe error categories, never notification text or credentials. The log rotates after 128 KiB and retains one previous file. A failure with no `started` record indicates that the shell or runtime failed before AgentBuzzer could start.
+
 The **Adapters** page can also remove each AgentBuzzer plugin individually after confirmation. This leaves the AgentBuzzer service, other adapters, channel settings, and marketplace registrations intact, but discards that Agent's pending notifications. Restart an already-open Agent session to unload hooks it may have cached.
 
 The app icon is maintained in `src/icon.svg`; `npm run stage` renders the desktop and Linux icon sizes before packaging. Windows and Linux remove Electron's default in-window menu bar. macOS retains the operating system's global application menu.
