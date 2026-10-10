@@ -3,14 +3,14 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { AGENTS, CHANNELS, loadConfig, readSettings, saveSettings } from "./config.mjs";
 import { activeChannels, sendChannel, validateEndpoint } from "./channels.mjs";
 import { advanceCycle, deliveryDecision, ingressDecision, resetBreak, validateNotifications } from "./policy.mjs";
 import { dataPath, listEntries, makeEntry, persistEntry, purgeAgent, purgeDisabled, removeEntry, updateEntry } from "./queue.mjs";
-import { saveSecret } from "./secret-store.mjs";
+import { hasSecret, saveSecret } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
+import { runCommand as executeCommand } from "./commands.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -49,7 +49,7 @@ function writeCycle(state, env) {
 }
 
 function safeSettings(env) {
-  const config = loadConfig(env);
+  const config = loadConfig(env, { includeSecret: false });
   return {
     deviceName: config.deviceName,
     notifications: config.notifications,
@@ -58,7 +58,7 @@ function safeSettings(env) {
         enabled: config.channels.feishu.enabled,
         appId: config.feishu.appId || "", receiveId: config.feishu.receiveId || "",
         receiveIdType: config.feishu.receiveIdType,
-        secretConfigured: Boolean(config.feishu.appSecret),
+        secretConfigured: Boolean(env.AGENTBUZZER_FEISHU_APP_SECRET || hasSecret()),
       },
       webhook: { enabled: config.channels.webhook.enabled, urlConfigured: Boolean(config.channels.webhook.url) },
       slack: { enabled: config.channels.slack.enabled, urlConfigured: Boolean(config.channels.slack.url) },
@@ -67,19 +67,7 @@ function safeSettings(env) {
 }
 
 function runCommand(program, args, timeout = 120000) {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(program, args, { windowsHide: true, shell: process.platform === "win32" && program !== process.execPath, cwd: ROOT, env: { ...process.env, AGENTBUZZER_NODE: process.execPath } });
-    let output = "";
-    child.stdout.on("data", (chunk) => { output += chunk; output = output.slice(-10000); });
-    child.stderr.on("data", (chunk) => { output += chunk; output = output.slice(-10000); });
-    child.once("error", reject);
-    const timer = setTimeout(() => child.kill(), timeout);
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolvePromise(output);
-      else reject(new Error(output.trim().slice(-800) || `${program} exited with code ${code}`));
-    });
-  });
+  return executeCommand(program, args, { timeoutMs: timeout, cwd: ROOT, env: { ...process.env, AGENTBUZZER_NODE: process.execPath } });
 }
 
 async function adapterStatus() {
@@ -108,16 +96,19 @@ async function adapterStatus() {
   return results;
 }
 
-export function createService({ env = process.env, deliver = sendChannel, uninstall = async (agent) => JSON.parse(await runCommand(process.execPath, [join(ROOT, "scripts", "uninstall.mjs"), `--${agent}`])), now = () => new Date(), intervalMs = 1000 } = {}) {
+export function createService({ env = process.env, deliver = sendChannel, detectAdapters = adapterStatus, uninstall = async (agent) => JSON.parse(await runCommand(process.execPath, [join(ROOT, "scripts", "uninstall.mjs"), `--${agent}`])), now = () => new Date(), intervalMs = 1000 } = {}) {
   let cycle = readCycle(env);
   let working = false;
   let closing = false;
   let tickTimer;
   let statusCache = { time: 0, value: null };
+  let statusCheck = null;
+  let statusError = null;
+  let statusGeneration = 0;
   const uninstallingAgents = new Set();
 
   function syncCycle() {
-    const next = advanceCycle(loadConfig(env).notifications.cycle, cycle, now().getTime());
+    const next = advanceCycle(loadConfig(env, { includeSecret: false }).notifications.cycle, cycle, now().getTime());
     if (next.phase !== cycle?.phase || next.until !== cycle?.until) {
       cycle = next;
       writeCycle(cycle, env);
@@ -131,7 +122,7 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
       syncCycle();
       for (const entry of listEntries(env)) {
         if (uninstallingAgents.has(entry.event.agent)) continue;
-        const config = loadConfig(env);
+        const config = loadConfig(env, { includeSecret: false });
         const decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
         if (decision === "drop") { removeEntry(entry); continue; }
         if (decision === "wait" || entry.nextAttemptAt > now().getTime()) continue;
@@ -143,7 +134,8 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
             continue;
           }
           try {
-            await deliver(channel, config.channels[channel], entry.event, config.deviceName);
+            const channelConfig = channel === "feishu" ? loadConfig(env).channels.feishu : config.channels[channel];
+            await deliver(channel, channelConfig, entry.event, config.deviceName);
             entry.pendingChannels = entry.pendingChannels.filter((name) => name !== channel);
             updateEntry(entry);
           } catch (error) {
@@ -162,7 +154,7 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
     if (!event || ![...AGENTS, "AgentBuzzer"].includes(event.agent) || !["completed", "failed", "needs_input"].includes(event.status) || typeof event.summary !== "string") {
       throw new Error("Invalid agent event");
     }
-    const config = loadConfig(env);
+    const config = loadConfig(env, { includeSecret: false });
     const n = config.notifications;
     const decision = ingressDecision(n, event.agent, now());
     if (decision !== "queue") return { disposition: "dropped", reason: decision };
@@ -212,7 +204,7 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
     }
     saveSettings(updated, env);
     syncCycle();
-    const config = loadConfig(env);
+    const config = loadConfig(env, { includeSecret: false });
     const discarded = purgeDisabled(config.notifications, config.channels, env);
     void pump();
     return { settings: safeSettings(env), discarded };
@@ -220,14 +212,25 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
 
   async function snapshot() {
     syncCycle();
-    if (Date.now() - statusCache.time > 15000) {
-      statusCache = { time: Date.now(), value: await adapterStatus() };
+    if (!statusCheck && (!statusCache.time || Date.now() - statusCache.time > 15000)) {
+      const generation = statusGeneration;
+      statusError = null;
+      statusCheck = Promise.resolve().then(detectAdapters).then((value) => {
+        if (generation === statusGeneration) statusCache = { time: Date.now(), value };
+      }).catch(() => {
+        if (generation === statusGeneration) {
+          statusError = "Adapter detection failed";
+          statusCache.time = Date.now();
+        }
+      }).finally(() => { statusCheck = null; });
     }
     return {
       settings: safeSettings(env),
       cycle,
       queue: listEntries(env).map(({ id, event, createdAt, attempts, pendingChannels }) => ({ id, agent: event.agent, status: event.status, summary: event.summary, createdAt, attempts, pendingChannels })),
       adapters: statusCache.value,
+      adaptersChecking: Boolean(statusCheck),
+      adaptersError: statusError,
     };
   }
 
@@ -243,7 +246,9 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
       return { ...result, discarded: purgeAgent(name, env) };
     } finally {
       uninstallingAgents.delete(name);
+      statusGeneration++;
       statusCache.time = 0;
+      statusCache.value = null;
       void pump().catch((error) => console.error(`AgentBuzzer: ${error.message}`));
     }
   }
@@ -276,7 +281,9 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
       if (request.method === "POST" && /^\/api\/install\/(codex|copilot|hermes)$/.test(url.pathname)) {
         const agent = url.pathname.split("/").at(-1);
         const output = await runCommand(process.execPath, [join(ROOT, "scripts", "install.mjs"), `--${agent}`, "--force"]);
+        statusGeneration++;
         statusCache.time = 0;
+        statusCache.value = null;
         return json(response, 200, { output: output.trim() });
       }
       if (request.method === "POST" && /^\/api\/uninstall\/(codex|copilot|hermes)$/.test(url.pathname)) {
@@ -295,7 +302,7 @@ export function createService({ env = process.env, deliver = sendChannel, uninst
         server.once("error", reject);
         server.listen(port, "127.0.0.1", () => { server.off("error", reject); resolvePromise(); });
       });
-      const config = loadConfig(env);
+      const config = loadConfig(env, { includeSecret: false });
       purgeDisabled(config.notifications, config.channels, env);
       tickTimer = setInterval(() => { void pump().catch((error) => console.error(`AgentBuzzer: ${error.message}`)); }, intervalMs);
       await pump();

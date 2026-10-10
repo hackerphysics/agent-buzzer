@@ -35,7 +35,7 @@ export async function ensureService() {
 }
 
 export async function submitEvent(event) {
-  const config = loadConfig();
+  const config = loadConfig(process.env, { includeSecret: false });
   if (ingressDecision(config.notifications, event.agent) !== "queue" || !activeChannels(config.channels).length) return { disposition: "dropped" };
   try {
     await ensureService();
@@ -48,7 +48,7 @@ export async function submitEvent(event) {
     if (!response.ok) throw new Error(`Service returned HTTP ${response.status}`);
     return response.json();
   } catch {
-    const current = loadConfig();
+    const current = loadConfig(process.env, { includeSecret: false });
     const channels = activeChannels(current.channels);
     if (ingressDecision(current.notifications, event.agent) !== "queue" || !channels.length) return { disposition: "dropped" };
     const entry = makeEntry(event, Date.now(), channels);

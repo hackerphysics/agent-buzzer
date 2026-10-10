@@ -14,6 +14,8 @@ The **Adapters** page can also remove each AgentBuzzer plugin individually after
 
 The app icon is maintained in `src/icon.svg`; `npm run stage` renders the desktop and Linux icon sizes before packaging. Windows and Linux remove Electron's default in-window menu bar. macOS retains the operating system's global application menu.
 
+Settings load independently of background adapter checks. Slow or failed Agent CLIs do not block the settings page; UI requests time out with a retry message instead of staying on "Connecting" indefinitely. Credential decryption occurs only when Feishu delivery needs the secret, not during page refresh or policy checks.
+
 Unsigned Windows and macOS installers can show operating-system trust warnings. Signing/notarization requires certificates that are not included in this repository.
 
 To run from source with Node.js 20 or newer:

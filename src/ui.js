@@ -5,6 +5,8 @@ let loaded = false;
 let saving = false;
 let currentSettings;
 let pendingRemoval;
+let refreshing = false;
+let adaptersChecking = true;
 const pageTitles = { overview: "概览", timing: "时间策略", channels: "通知通道", adapters: "适配器" };
 let currentPage = pageTitles[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
 
@@ -91,6 +93,7 @@ function fill(settings) {
     for (const day of $("weekdays").querySelectorAll("input")) day.checked = settings.notifications.workHours.days.includes(Number(day.value));
   }
   loaded = true;
+  for (const control of document.querySelectorAll(".page input, .page select, .primary-button")) control.disabled = false;
   showFields();
 }
 
@@ -134,10 +137,17 @@ function formData() {
 }
 
 async function api(path, options) {
-  const response = await fetch(path, options);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-  return data;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), path.startsWith("/api/install/") || path.startsWith("/api/uninstall/") ? 125000 : 10000);
+  try {
+    const response = await fetch(path, { ...options, signal: controller.signal, cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("请求超时，请点击刷新重试");
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 
 async function save() {
@@ -205,17 +215,18 @@ function showCodexGuide() {
   guide.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-function renderAdapters(adapters) {
+function renderAdapters(adapters, checking, failed) {
   const container = $("adapters");
   container.replaceChildren();
   $("codex-guide").hidden = !adapters?.codex?.installed;
   for (const [name, key] of agentNames) {
-    const status = adapters?.[key] || { available: false, installed: false };
+    const status = adapters?.[key];
+    const known = Boolean(status);
     const row = element("div", "adapter-row");
     const left = element("div");
-    left.append(element("b", null, name), element("small", status.installed ? "已安装" : status.available ? "未安装" : "CLI 不可用"));
-    const button = element("button", "outline-button", status.installed ? "更新" : "安装");
-    button.disabled = !status.available;
+    left.append(element("b", null, name), element("small", null, !known ? failed ? "检测失败" : "检测中…" : status.installed ? "已安装" : status.available ? "未安装" : "CLI 不可用"));
+    const button = element("button", "outline-button", status?.installed ? "更新" : "安装");
+    button.disabled = !status?.available || (!known && checking);
     button.addEventListener("click", async () => {
       button.disabled = true;
       button.textContent = "处理中…";
@@ -227,14 +238,14 @@ function renderAdapters(adapters) {
       } catch (error) { $("feedback").textContent = error.message; button.disabled = false; button.textContent = "重试"; }
     });
     const actions = element("div", "adapter-actions");
-    if (key === "codex" && status.installed) {
+    if (key === "codex" && status?.installed) {
       const guideButton = element("button", "text-button", "授权步骤");
       guideButton.type = "button";
       guideButton.addEventListener("click", showCodexGuide);
       actions.append(guideButton);
     }
     actions.append(button);
-    if (status.installed) {
+    if (status?.installed) {
       const removeButton = element("button", "remove-button", "移除");
       removeButton.type = "button";
       removeButton.disabled = !status.available;
@@ -271,6 +282,8 @@ $("remove-dialog").addEventListener("close", async () => {
 });
 
 async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
   try {
     const data = await api("/api/state");
     $("connection").textContent = "服务运行中";
@@ -282,13 +295,14 @@ async function refresh() {
     currentSettings = data.settings;
     if (!loaded) fill(data.settings);
     renderQueue(data.queue);
-    renderAdapters(data.adapters);
+    adaptersChecking = data.adaptersChecking === true;
+    renderAdapters(data.adapters, adaptersChecking, data.adaptersError);
     const n = data.settings.notifications;
     const subtitles = {
       overview: !n.enabled ? "通知已关闭" : n.dnd || (n.cycle.enabled && data.cycle.phase === "break") ? "勿扰中 · 消息待补发" : "通知已开启",
       timing: n.workHours.enabled ? `${n.workHours.start}–${n.workHours.end} · ${n.workHours.days.length} 天` : "未设置工作时段",
       channels: `${Object.values(data.settings.channels).filter((channel) => channel.enabled).length} 个通道已开启`,
-      adapters: `${Object.values(data.adapters || {}).filter((adapter) => adapter.installed).length} 个适配器已安装`,
+      adapters: !data.adapters ? data.adaptersError ? "适配器检测失败" : "正在检测适配器" : `${Object.values(data.adapters).filter((adapter) => adapter.installed).length} 个适配器已安装`,
     };
     $("summary").textContent = subtitles[currentPage];
     $("phase").textContent = n.cycle.enabled ? `${data.cycle.phase === "break" ? "Break" : "Work"} · 下次切换 ${new Date(data.cycle.until).toLocaleTimeString()}` : "";
@@ -297,7 +311,8 @@ async function refresh() {
     $("connection").classList.remove("online");
     $("feedback").textContent = error.message;
     $("feedback").dataset.networkError = "true";
-  }
+    if (!loaded) $("summary").textContent = "设置加载失败，请刷新重试";
+  } finally { refreshing = false; }
 }
 
 for (const id of ["enabled", "dnd", "feishu-enabled", "webhook-enabled", "slack-enabled"]) {
@@ -310,5 +325,7 @@ $("refresh").addEventListener("click", refresh);
 for (const button of document.querySelectorAll(".nav-item")) button.addEventListener("click", () => { location.hash = button.dataset.page; selectPage(button.dataset.page); });
 window.addEventListener("hashchange", () => selectPage(location.hash.slice(1)));
 selectPage(currentPage);
+for (const control of document.querySelectorAll(".page input, .page select, .primary-button")) control.disabled = true;
 void refresh();
 setInterval(() => { if (!saving) void refresh(); }, 8000);
+setInterval(() => { if (adaptersChecking && !saving) void refresh(); }, 1000);

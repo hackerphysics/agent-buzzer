@@ -35,3 +35,7 @@ export function loadSecret() {
   const script = "Add-Type -AssemblyName System.Security; $b=[Convert]::FromBase64String([Console]::In.ReadToEnd()); $d=[Security.Cryptography.ProtectedData]::Unprotect($b,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser); [Console]::Out.Write([Text.Encoding]::UTF8.GetString($d))";
   return powershell(script, readFileSync(SECRET_PATH, "utf8"));
 }
+
+export function hasSecret() {
+  return existsSync(SECRET_PATH);
+}

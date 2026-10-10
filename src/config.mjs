@@ -47,7 +47,7 @@ export function saveSettings(settings, env = process.env) {
   renameSync(temporary, path);
 }
 
-export function loadConfig(env = process.env) {
+export function loadConfig(env = process.env, { includeSecret = true } = {}) {
   const settings = readSettings(env);
   const feishu = settings.channels?.feishu || settings.feishu || {};
   const webhook = settings.channels?.webhook || {};
@@ -60,7 +60,7 @@ export function loadConfig(env = process.env) {
   const feishuConfig = {
     enabled: feishu.enabled !== false,
     appId: env.AGENTBUZZER_FEISHU_APP_ID || feishu.appId,
-    appSecret: env.AGENTBUZZER_FEISHU_APP_SECRET || loadSecret(),
+    appSecret: includeSecret ? env.AGENTBUZZER_FEISHU_APP_SECRET || loadSecret() : undefined,
     receiveId,
     receiveIdType,
   };
