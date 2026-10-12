@@ -57,6 +57,10 @@
             <div class="row channel-heading"><div><h2 id="channel-title"></h2><small id="channel-state"></small></div><label class="switch"><input id="channel-enabled" type="checkbox" aria-label="启用当前通道"><span></span></label></div>
             <form id="channel-form">
               <div id="channel-fields" class="fields"></div>
+              <details id="webhook-preview" class="webhook-preview" hidden>
+                <summary>JSON 预览</summary>
+                <pre id="webhook-json" aria-live="polite"></pre>
+              </details>
               <div class="channel-actions"><button id="save" class="primary-button" type="submit">保存通道设置</button><button id="test-channel" class="outline-button" type="button">发送测试通知</button></div>
             </form>
             <p id="channel-result" class="channel-result" role="status" aria-live="polite"></p>

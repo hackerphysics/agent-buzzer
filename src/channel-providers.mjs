@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { shortSummary } from "./card.mjs";
 import { channelDefinition, validateEndpoint, validateField } from "./channel-schema.mjs";
+import { webhookPayload } from "./webhook.mjs";
 
 export function notificationText(event, deviceName) {
   const status = { completed: "已完成", needs_input: "等待处理", failed: "未完成" }[event.status] || event.status;
@@ -117,7 +118,7 @@ export async function sendProvider(name, config, event, deviceName, fetchImpl = 
   if (["webhook", "slack", "discord", "teams", "googlechat", "mattermost", "feishuBot", "dingtalk", "wecom"].includes(name)) url = validateEndpoint(config.url, name);
   if (["matrix", "ntfy", "bark", "gotify"].includes(name)) validateEndpoint(config.serverUrl, name, { server: true });
   if (name === "webhook") {
-    payload = { event, deviceName };
+    payload = webhookPayload(config, event, deviceName, context);
     if (config.accessToken) headers.Authorization = `Bearer ${config.accessToken}`;
   } else if (name === "slack") {
     payload = { text: text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") };

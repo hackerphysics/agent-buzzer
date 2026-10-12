@@ -20,7 +20,8 @@ test("card is an interactive Feishu card with device, status and short summary",
 });
 
 test("Codex turn and approval events stay separate", () => {
-  assert.deepEqual(fromCodexStop({ turn_id: "t1", last_assistant_message: "已经完成" }), {
+  const stop = fromCodexStop({ turn_id: "t1", last_assistant_message: "已经完成" });
+  assert.deepEqual({ agent: stop.agent, status: stop.status, summary: stop.summary, key: stop.key }, {
     agent: "Codex", status: "completed", summary: "已经完成", key: "t1",
   });
   assert.equal(fromCodexPermission({ turn_id: "t1", tool_input: { description: "需要权限" } }).status, "needs_input");

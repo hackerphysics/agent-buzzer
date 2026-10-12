@@ -12,6 +12,8 @@ let selectedChannel = location.hash.slice(1).split("/")[1] || "feishu";
 let pendingTestChannel;
 let deliveryStates = {};
 const channelDrafts = new Map();
+let previewTimer;
+let previewRevision = 0;
 const pageTitles = { overview: "概览", timing: "时间策略", channels: "通知通道", adapters: "适配器" };
 let currentPage = pageTitles[location.hash.slice(1).split("/")[0]] ? location.hash.slice(1).split("/")[0] : "overview";
 
@@ -198,7 +200,46 @@ function renderChannelEditor() {
   $("channel-enabled").checked = draft.enabled ?? status.enabled;
   $("channel-enabled").disabled = false;
   const fields = $("channel-fields"); fields.replaceChildren();
+  $("webhook-preview").hidden = selectedChannel !== "webhook";
+  previewRevision++;
   for (const spec of definition.fields) {
+    if (spec.type === "mapping") {
+      const mapping = draft[spec.name] ?? status[spec.name] ?? {};
+      const container = element("div", "webhook-mapping");
+      container.id = `channel-${selectedChannel}-${spec.name}`;
+      const heading = element("div", "section-head");
+      heading.append(element("h3", null, spec.label));
+      const reset = element("button", "text-button", "恢复默认");
+      reset.type = "button";
+      reset.addEventListener("click", () => {
+        for (const input of container.querySelectorAll("input")) input.value = input.dataset.source;
+        channelDrafts.set(selectedChannel, collectChannel());
+        $("test-channel").disabled = true;
+        scheduleWebhookPreview();
+      });
+      heading.append(reset); container.append(heading);
+      const header = element("div", "mapping-row mapping-header");
+      header.append(element("span", null, "AgentBuzzer 字段"), element("span", null, "目标 JSON 路径"));
+      container.append(header);
+      for (const source of spec.fields) {
+        const row = element("label", "mapping-row");
+        const caption = element("span", "mapping-source");
+        caption.append(element("code", null, source.name), element("small", null, source.label));
+        const input = element("input");
+        input.id = `webhook-map-${source.name}`;
+        row.htmlFor = input.id;
+        input.dataset.source = source.name;
+        input.setAttribute("aria-label", `${source.name} 目标 JSON 路径`);
+        input.value = mapping[source.name] || source.name;
+        input.placeholder = source.name;
+        input.maxLength = 200;
+        input.autocomplete = "off";
+        input.addEventListener("input", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; scheduleWebhookPreview(); });
+        row.append(caption, input); container.append(row);
+      }
+      fields.append(container);
+      continue;
+    }
     const label = element("label", "channel-field");
     const caption = element("span", "field-caption", spec.required ? spec.label : `${spec.label}（可选）`);
     const input = element(spec.type === "select" ? "select" : "input");
@@ -206,7 +247,7 @@ function renderChannelEditor() {
     input.name = spec.name;
     input.setAttribute("aria-label", spec.label);
     label.htmlFor = input.id;
-    if (spec.options) for (const option of spec.options) { const node = element("option", null, option); node.value = option; input.append(node); }
+    if (spec.options) for (const option of spec.options) { const node = element("option", null, spec.optionLabels?.[option] || option); node.value = option; input.append(node); }
     else input.type = spec.type;
     if (spec.min !== undefined) input.min = String(spec.min);
     if (spec.max !== undefined) input.max = String(spec.max);
@@ -230,13 +271,30 @@ function renderChannelEditor() {
         caption.append(clear);
       }
     }
-    input.addEventListener("input", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; });
-    input.addEventListener("change", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; });
+    input.addEventListener("input", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; scheduleWebhookPreview(); });
+    input.addEventListener("change", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; scheduleWebhookPreview(); });
     label.append(caption, input); fields.append(label);
   }
   $("save").disabled = saving;
   $("test-channel").disabled = saving || !status.enabled || !status.configured || channelDrafts.has(selectedChannel);
   renderChannelResult();
+  scheduleWebhookPreview();
+}
+
+function scheduleWebhookPreview() {
+  clearTimeout(previewTimer);
+  const revision = ++previewRevision;
+  if (selectedChannel !== "webhook") return;
+  const standard = $("channel-webhook-payloadFormat").value === "standard";
+  $("channel-webhook-fieldMapping").hidden = !standard;
+  $("webhook-json").textContent = "…";
+  previewTimer = setTimeout(async () => {
+    try {
+      const { fieldMapping, payloadFormat } = collectChannel();
+      const payload = await api("/api/webhook/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fieldMapping: standard ? fieldMapping : {}, payloadFormat }) });
+      if (revision === previewRevision) $("webhook-json").textContent = JSON.stringify(payload, null, 2);
+    } catch (error) { if (revision === previewRevision) $("webhook-json").textContent = error.message; }
+  }, 250);
 }
 
 function collectChannel() {
@@ -244,6 +302,10 @@ function collectChannel() {
   const draft = channelDrafts.get(selectedChannel) || {};
   const value = { enabled: $("channel-enabled").checked };
   for (const spec of definition.fields) {
+    if (spec.type === "mapping") {
+      value[spec.name] = Object.fromEntries([...$(`channel-${selectedChannel}-${spec.name}`).querySelectorAll("input")].map((input) => [input.dataset.source, input.value.trim() || input.dataset.source]));
+      continue;
+    }
     const text = $(`channel-${selectedChannel}-${spec.name}`).value;
     if (spec.secret) { if (text) value[spec.name] = text; else if (draft[spec.name] === null) value[spec.name] = null; }
     else value[spec.name] = spec.type === "number" && text !== "" ? Number(text) : text.trim();
@@ -449,6 +511,7 @@ $("save-device").addEventListener("click", async () => {
   try {
     const result = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceName: $("device-name").value.trim() }) });
     currentSettings = result.settings; $("feedback").textContent = "设备名称已保存";
+    scheduleWebhookPreview();
   } catch (error) { $("feedback").textContent = error.message; }
   finally { $("save-device").disabled = false; }
 });

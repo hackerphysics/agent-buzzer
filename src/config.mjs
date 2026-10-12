@@ -65,10 +65,16 @@ export function loadChannelConfig(name, env = process.env, { includeSecret = tru
   const saved = name === "feishu" ? { ...settings.feishu, ...settings.channels?.feishu } : settings.channels?.[name] || {};
   const channel = { enabled: definition.defaultEnabled ? saved.enabled !== false : saved.enabled === true };
   const keys = includeSecret ? credentialKeys(env) : new Set();
+  const existingWebhook = name === "webhook" && Boolean(saved.url || env.AGENTBUZZER_WEBHOOK_URL || credentialKeys(env).has("webhook.url"));
   for (const spec of definition.fields) {
     const property = spec.property || spec.name;
     const fromEnv = env[channelEnv(name, spec)];
     let value = fromEnv !== undefined && fromEnv !== "" ? fromEnv : saved[spec.name] ?? saved[property] ?? spec.default;
+    // Keep existing receivers on the old contract until the user opts in.
+    if (spec.name === "payloadFormat" && existingWebhook && !fromEnv && saved.payloadFormat === undefined) value = "legacy";
+    if (spec.type === "mapping" && fromEnv) {
+      try { value = JSON.parse(fromEnv); } catch { throw new Error("Invalid Webhook field mapping environment variable"); }
+    }
     if (spec.secret) {
       if (!includeSecret) value = undefined;
       else if (!fromEnv && keys.has(`${name}.${spec.name}`)) value = loadCredential(`${name}.${spec.name}`, env);

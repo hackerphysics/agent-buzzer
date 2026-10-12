@@ -1,4 +1,5 @@
 import { basename, isAbsolute } from "node:path";
+import { WEBHOOK_FIELDS, validateMapping } from "./webhook.mjs";
 
 const field = (name, label, options = {}) => ({ name, label, type: "text", required: true, ...options });
 const secret = (name, label, options = {}) => field(name, label, { secret: true, type: "password", ...options });
@@ -24,7 +25,7 @@ export const CHANNEL_CATALOG = [
   { id: "pushover", label: "Pushover", group: "移动推送", fields: [secret("appToken", "Application Token"), secret("userKey", "User Key"), field("device", "Device", { required: false })] },
   { id: "email", label: "邮件 SMTP", group: "邮件与短信", fields: [field("host", "SMTP Host"), field("port", "SMTP Port", { type: "number", default: 587, min: 1, max: 65535 }), field("tls", "传输加密", { type: "select", default: "starttls", options: ["starttls", "tls"] }), field("user", "用户名", { required: false }), secret("password", "密码 / App Password", { required: false }), field("from", "发件人邮箱"), field("to", "收件人邮箱")] },
   { id: "sms", label: "短信 Twilio", group: "邮件与短信", paid: true, fields: [field("accountSid", "Account SID"), secret("authToken", "Auth Token"), field("from", "发送号码"), field("to", "接收号码")] },
-  { id: "webhook", label: "通用 Webhook", group: "桥接与自定义", fields: [webhook("HTTPS URL"), secret("accessToken", "Bearer Token", { required: false })] },
+  { id: "webhook", label: "通用 Webhook", group: "桥接与自定义", fields: [webhook("HTTPS URL"), secret("accessToken", "Bearer Token", { required: false }), field("payloadFormat", "消息格式", { type: "select", default: "standard", options: ["standard", "legacy"], optionLabels: { standard: "标准消息 v1", legacy: "旧格式：event + deviceName" } }), field("fieldMapping", "字段映射", { type: "mapping", required: false, default: {}, fields: WEBHOOK_FIELDS })] },
   { id: "hermes", label: "Hermes 发送桥接", group: "桥接与自定义", fields: [field("target", "投递目标"), field("program", "Hermes 可执行文件", { default: "hermes" })] },
 ];
 
@@ -66,6 +67,7 @@ export function validateEndpoint(value, kind, { server = false } = {}) {
 export function validateField(name, spec, value) {
   if (value === undefined) return undefined;
   if (value === null && spec.secret) return null;
+  if (spec.type === "mapping") return validateMapping(value);
   if (spec.type === "number") {
     if (value === "" && !spec.required) return "";
     if (!["string", "number"].includes(typeof value)) throw new Error(`Invalid ${spec.label}`);

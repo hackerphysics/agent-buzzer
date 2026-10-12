@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFile
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { configPath } from "./config.mjs";
+import { eventText, eventTime } from "./webhook.mjs";
 
 export function dataPath(name, env = process.env) {
   return join(dirname(configPath(env)), name);
@@ -20,8 +21,14 @@ export function makeEntry(event, now = Date.now(), pendingChannels) {
       summary: event.summary,
       key: event.key,
       url: event.url,
+      sessionId: eventText(event.sessionId),
+      sessionName: eventText(event.sessionName, 256),
+      turnId: eventText(event.turnId),
+      resultDetails: eventText(event.resultDetails, 8000) || eventText(event.summary, 8000),
+      occurredAt: eventTime(event.occurredAt, new Date(now).toISOString()),
     },
     createdAt: new Date(now).toISOString(),
+    ...(event.deviceName ? { deviceName: eventText(event.deviceName, 100) } : {}),
     pendingChannels,
     attempts: 0,
     nextAttemptAt: 0,

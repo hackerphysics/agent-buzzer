@@ -1,6 +1,17 @@
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { shortSummary } from "./card.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
+import { eventText, eventTime } from "./webhook.mjs";
+
+export function eventMetadata(input, details) {
+  return {
+    sessionId: eventText(input.sessionId || input.session_id),
+    sessionName: eventText(input.sessionName || input.session_name || input.session_title, 256),
+    turnId: eventText(input.turnId || input.turn_id),
+    resultDetails: eventText(details, 8000),
+    occurredAt: eventTime(input.occurredAt || input.occurred_at || input.completed_at, new Date().toISOString()),
+  };
+}
 
 function text(value, fallback) {
   return shortSummary(value, fallback);
@@ -12,6 +23,7 @@ export function fromCodexStop(input) {
     status: "completed",
     summary: text(input.last_assistant_message, "本轮任务已结束"),
     key: input.turn_id || input.session_id,
+    ...eventMetadata(input, input.last_assistant_message),
   };
 }
 
@@ -21,6 +33,7 @@ export function fromCodexPermission(input) {
     status: "needs_input",
     summary: text(input.tool_input?.description, "有操作需要你批准"),
     key: input.turn_id || input.session_id,
+    ...eventMetadata(input, input.tool_input?.description),
   };
 }
 
@@ -86,6 +99,7 @@ export function fromCopilotStop(input, reply = lastCopilotReply(input.transcript
     status: "completed",
     summary: text(reply, "本轮任务已结束"),
     key: input.sessionId || input.session_id,
+    ...eventMetadata(input, reply),
   };
 }
 
@@ -96,6 +110,7 @@ export function fromCopilotNotification(input) {
     status: "needs_input",
     summary: text(input.message, "Copilot 正在等待你处理"),
     key: input.sessionId || input.session_id,
+    ...eventMetadata(input, input.message),
   };
 }
 
@@ -108,5 +123,6 @@ export function fromHermes(input) {
     status: input.status,
     summary: text(input.summary, input.status === "needs_input" ? "Hermes 正在等待你处理" : "本轮任务已结束"),
     key: input.turn_id || input.session_id,
+    ...eventMetadata(input, input.resultDetails ?? input.summary),
   };
 }

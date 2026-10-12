@@ -72,7 +72,7 @@ for (const [name, config, result] of cases) {
     assert.equal(request.redirect, "error");
     assert.ok(request.signal instanceof AbortSignal);
     assert.equal(request.method, name === "matrix" ? "PUT" : "POST");
-    if (name === "webhook") { assert.deepEqual(body, { event, deviceName: "Test-PC" }); assert.equal(request.headers.Authorization, `Bearer ${token}`); }
+    if (name === "webhook") { assert.equal(body.agentName, "Codex"); assert.equal(body.deviceName, "Test-PC"); assert.equal(body.appName, "AgentBuzzer"); assert.equal(body.eventId, "queue-id"); assert.equal(body.schemaVersion, 1); assert.equal(request.headers.Authorization, `Bearer ${token}`); }
     if (name === "slack") assert.match(body.text, /&lt;!channel&gt; &amp; done/);
     if (name === "telegram") { assert.equal(body.chat_id, telegram.chatId); assert.equal(body.message_thread_id, 12); assert.ok(!body.parse_mode); }
     if (name === "discord") { assert.deepEqual(body.allowed_mentions, { parse: [] }); assert.equal(new URL(request.url).searchParams.get("wait"), "true"); }

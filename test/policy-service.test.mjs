@@ -185,7 +185,7 @@ test("disabling one channel drops only its pending delivery", async (t) => {
 test("webhook and Slack format payloads without disclosing endpoint URLs", async () => {
   const requests = [];
   const fetchImpl = async (url, init) => { requests.push({ url, init }); return { ok: true, status: 200 }; };
-  await sendChannel("webhook", { url: "https://example.com/notify" }, event(), "PC", fetchImpl);
+  await sendChannel("webhook", { url: "https://example.com/notify", payloadFormat: "legacy" }, event(), "PC", fetchImpl);
   assert.deepEqual(JSON.parse(requests[0].init.body), { event: event(), deviceName: "PC" });
   await sendChannel("slack", { url: "https://hooks.slack.com/services/T/B/key" }, { ...event(), summary: "<@all> & done" }, "PC", fetchImpl);
   assert.match(JSON.parse(requests[1].init.body).text, /&lt;@all&gt; &amp; done/);

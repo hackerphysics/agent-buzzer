@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { buildCard } from "./card.mjs";
 import { loadConfig, readSettings, safeChannelSettings, saveSettings } from "./config.mjs";
-import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "./adapters.mjs";
+import { eventMetadata, fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "./adapters.mjs";
 import { getTenantToken } from "./feishu.mjs";
 import { saveCredentials } from "./secret-store.mjs";
 import { ensureService, submitEvent } from "./client.mjs";
@@ -50,6 +50,7 @@ export async function main(args) {
   if (command === "copilot-stop") {
     const input = await readInput();
     const payload = Buffer.from(JSON.stringify({
+      ...eventMetadata(input),
       transcriptPath: input.transcriptPath || input.transcript_path,
       sessionId: input.sessionId || input.session_id,
     })).toString("base64url");

@@ -51,7 +51,7 @@ export async function submitEvent(event) {
     const current = loadConfig(process.env, { includeSecret: false });
     const channels = activeChannels(current.channels);
     if (ingressDecision(current.notifications, event.agent) !== "queue" || !channels.length) return { disposition: "dropped" };
-    const entry = makeEntry(event, Date.now(), channels);
+    const entry = makeEntry({ ...event, deviceName: current.deviceName }, Date.now(), channels);
     persistEntry(entry);
     return { disposition: "queued_offline", id: entry.id };
   }

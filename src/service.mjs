@@ -12,6 +12,7 @@ import { dataPath, listEntries, makeEntry, persistEntry, purgeAgent, purgeDisabl
 import { credentialKeys, hasSecret, saveCredentials } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
 import { runCommand as executeCommand } from "./commands.mjs";
+import { webhookPayload } from "./webhook.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -151,7 +152,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
           try {
             const channelConfig = loadChannelConfig(channel, env);
             channelDelivery[channel] = { state: "sending", time: now().toISOString() };
-            await deliver(channel, channelConfig, entry.event, current.deviceName, undefined, { deliveryId: entry.id });
+            await deliver(channel, channelConfig, entry.event, entry.deviceName || current.deviceName, undefined, { deliveryId: entry.id, createdAt: entry.createdAt });
             channelDelivery[channel] = { state: "sent", time: now().toISOString() };
             entry.pendingChannels = entry.pendingChannels.filter((name) => name !== channel);
             delete entry.channelRetries[channel];
@@ -181,7 +182,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     if (decision !== "queue") return { disposition: "dropped", reason: decision };
     const channels = activeChannels(config.channels).filter((name) => !selectedChannels || selectedChannels.includes(name));
     if (!channels.length) return { disposition: "dropped", reason: "no_channel" };
-    const entry = makeEntry(event, now().getTime(), channels);
+    const entry = makeEntry({ ...event, deviceName: config.deviceName }, now().getTime(), channels);
     persistEntry(entry, env);
     syncCycle();
     const next = resetBreak(n.cycle, cycle, now().getTime());
@@ -328,6 +329,12 @@ export function createService({ env = process.env, deliver = sendChannel, detect
       if (request.method === "GET" && url.pathname === "/api/state") return json(response, 200, await snapshot());
       if (request.method === "POST" && url.pathname === "/api/events") return json(response, 200, await accept(await body(request)));
       if (request.method === "PUT" && url.pathname === "/api/settings") return json(response, 200, updateSettings(await body(request)));
+      if (request.method === "POST" && url.pathname === "/api/webhook/preview") {
+        const input = await body(request);
+        const definition = channelDefinition("webhook");
+        const config = Object.fromEntries(definition.fields.filter(({ secret }) => !secret).map((spec) => [spec.name, validateField("webhook", spec, input[spec.name] ?? spec.default)]));
+        return json(response, 200, webhookPayload(config, { agent: "Codex", status: "completed", summary: "任务已完成", sessionName: "示例会话", sessionId: "session-example", turnId: "turn-example", occurredAt: "2026-01-01T08:00:00.000Z" }, loadConfig(env, { includeSecret: false }).deviceName, { deliveryId: "event-example" }));
+      }
       if (request.method === "POST" && /^\/api\/channels\/[A-Za-z0-9_-]+\/test$/.test(url.pathname)) return json(response, 200, await testChannel(url.pathname.split("/")[3]));
       if (request.method === "POST" && /^\/api\/install\/(codex|copilot|hermes)$/.test(url.pathname)) {
         const agent = url.pathname.split("/").at(-1);

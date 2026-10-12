@@ -89,7 +89,40 @@ Teams uses Workflows, not retired Office 365 connectors. Matrix checks room encr
 
 The optional Hermes bridge invokes `hermes send --to <target> --file - --quiet` with an argument array and the message on stdin. It does not copy Hermes credentials or start a model conversation. The installed Hermes version must provide `hermes send`, and its target must already be configured. On Windows use a native executable, such as the Python-installed `hermes.exe`, rather than a `.cmd` shim. Known media/file directives are neutralized so notification summaries cannot request file attachments. WhatsApp and Signal support here depends on that external gateway; personal WeChat, QQ, iMessage and other account/session-based integrations are not advertised as native senders.
 
-Generic webhooks receive `{ "event": { "agent": "...", "status": "...", "summary": "..." }, "deviceName": "..." }`. Provider HTTP/business failures stay in the durable queue. Retry schedules are per channel and honor HTTP `Retry-After` and Telegram/Discord rate-limit responses. Matrix and LINE reuse transaction keys on retries. A provider acknowledgement is not a read receipt, and an already-in-flight remote request cannot be recalled when a switch is turned off.
+Generic webhooks use the standard v1 contract below with editable JSON field mappings. Previously configured webhooks retain `{ "event": { "agent": "...", "status": "...", "summary": "..." }, "deviceName": "..." }` until you explicitly select **Standard message v1**. You can select the legacy format again without deleting your saved mappings.
+
+Provider HTTP/business failures stay in the durable queue. Retry schedules are per channel and honor HTTP `Retry-After` and Telegram/Discord rate-limit responses. Matrix and LINE reuse transaction keys on retries. A provider acknowledgement is not a read receipt, and an already-in-flight remote request cannot be recalled when a switch is turned off.
+
+### Webhook contract
+
+The generic webhook sends an HTTPS `POST` with `Content-Type: application/json; charset=utf-8` and an optional `Authorization: Bearer <token>`. Any HTTP 2xx response acknowledges receipt. Standard v1 JSON:
+
+```json
+{
+  "deviceName": "Office-PC",
+  "agentName": "Codex",
+  "appName": "AgentBuzzer",
+  "sessionName": "Update notification settings",
+  "resultDetails": "Implemented and verified the requested change.",
+  "completedAt": "2026-10-12T08:00:00.000Z",
+  "eventId": "unique-persisted-queue-id",
+  "sessionId": "session-id",
+  "turnId": "turn-id",
+  "status": "completed",
+  "occurredAt": "2026-10-12T08:00:00.000Z",
+  "schemaVersion": 1
+}
+```
+
+- Set `deviceName` in the app's Channels page. New events capture that name when queued; renaming the device does not rename an existing backlog.
+- `sessionName` uses a title supplied by the Agent, otherwise its session ID, otherwise an empty string. Hooks do not always expose a conversation title. Unavailable session/turn IDs are empty strings, not fabricated IDs.
+- `resultDetails` preserves up to 8,000 characters of the Agent's result, separate from the short summary used by chat channels. It may contain sensitive task output; configure only receivers you trust.
+- `status` is `completed`, `failed`, or `needs_input`. `completedAt` is the end time for completed/failed events and `null` while waiting for input. `occurredAt` is always the event time. If a hook does not supply a timestamp, the adapter captures it; direct ingress and older queue files fall back to their queue creation time. Times are UTC ISO 8601, not replay/send times.
+- `eventId` is stable across retries and restarts. Delivery is at least once; receivers can use this ID to deduplicate. It identifies the notification event, not the session.
+- In the Webhook page, each source field defaults to the identical destination name. Blank destinations also mean identity. A destination such as `data.message` nests the value under `data`. Values retain their original type. Arrays, templates, static fields, omission and type conversion are not supported. Duplicate destinations, parent/child collisions and unsafe object keys are rejected.
+- **Restore defaults** resets the mapping draft; save to apply it. **JSON preview** is a synthetic example using the saved device name and sends nothing. Mapping and format changes apply to deliveries that have not yet been sent, including backlog/retries.
+
+Settings example: `channels.webhook.payloadFormat = "standard"` and `channels.webhook.fieldMapping = {"deviceName":"device","resultDetails":"data.message"}`. Environment overrides are `AGENTBUZZER_WEBHOOK_PAYLOAD_FORMAT` and `AGENTBUZZER_WEBHOOK_FIELD_MAPPING` (a JSON object).
 
 The channel/gateway split is informed by [OpenClaw's channel catalog](https://github.com/openclaw/openclaw/blob/main/docs/channels/index.md) and [Hermes's one-shot send interface](https://github.com/nousresearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md). This app implements outbound task notifications, not their full two-way chat gateways.
 
