@@ -1,6 +1,6 @@
 {
   "name": "agent-buzzer",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Local notification service for coding agents",
   "author": "hackerphysics",
   "private": true,
@@ -32,7 +32,11 @@
     "productName": "AgentBuzzer",
     "asar": true,
     "files": ["desktop/**/*", "package.json"],
-    "extraResources": [{ "from": "build/app", "to": "agent-buzzer" }],
+    "extraResources": [
+      { "from": "build/app", "to": "agent-buzzer" },
+      { "from": "build/app/node_modules/nodemailer", "to": "agent-buzzer/node_modules/nodemailer", "filter": ["**/*"] }
+    ],
+    "afterPack": "scripts/verify-packaged-app.mjs",
     "directories": { "output": "release" },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "forceCodeSigning": false,

@@ -169,3 +169,5 @@ npm run build:installers
 ```
 
 The plugin sources are in `plugins/`; generated plugin copies, staging output, and installers are ignored under `.agents/plugins/agent-buzzer/`, `dist/`, `build/`, and `release/`. The GitHub workflow builds Windows x64 NSIS, macOS x64 and arm64 DMGs, and Linux x64 DEB on native runners.
+
+Nodemailer is explicitly copied into the external service resources because Electron's ASAR dependencies are not available to the bundled standalone Node runtime. The `afterPack` hook checks the actual packaged resources, imports the card and mail modules with the bundled Node, and builds an in-memory MIME message without a network connection. Missing service dependencies fail the installer build.
