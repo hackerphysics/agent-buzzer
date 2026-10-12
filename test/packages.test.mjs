@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
-import { packagePlugins, ROOT, windowsHookCommand } from "../scripts/package-plugins.mjs";
+import { packagePlugins, posixHookCommand, ROOT, windowsHookCommand } from "../scripts/package-plugins.mjs";
 
 test("native plugin bundles contain self-sufficient service and local hook paths", async () => {
   const paths = packagePlugins();
@@ -19,8 +19,11 @@ test("native plugin bundles contain self-sufficient service and local hook paths
     await import(pathToFileURL(join(path, "src", "service.mjs")));
   }
   const codex = JSON.parse(readFileSync(join(paths.codex, "hooks", "hooks.json"), "utf8"));
-  for (const groups of Object.values(codex.hooks)) {
+  for (const [event, groups] of Object.entries(codex.hooks)) {
     for (const group of groups) {
+      const action = event === "Stop" ? "codex-stop" : "codex-permission";
+      assert.equal(group.hooks[0].command, posixHookCommand(process.execPath, join(ROOT, "bin", "agent-buzzer.mjs"), action));
+      assert.equal(group.hooks[0].commandWindows, windowsHookCommand(process.execPath, join(ROOT, "bin", "agent-buzzer.mjs"), action));
       assert.match(group.hooks[0].commandWindows, /^powershell\.exe -NoProfile -NonInteractive -EncodedCommand [A-Za-z0-9+/=]+$/);
       assert.doesNotMatch(group.hooks[0].commandWindows, /PLUGIN_ROOT|async/);
     }

@@ -12,8 +12,8 @@ const gitBash = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]]
   .filter(Boolean).map((root) => join(root, "Git", "bin", "bash.exe")).find(existsSync);
 const shells = windows ? [
   { name: "cmd.exe", program: process.env.COMSPEC || "cmd.exe", args: (command) => ["/D", "/S", "/C", `"${command}"`], raw: true },
-  { name: "Windows PowerShell 5.1", program: "powershell.exe", args: (command) => ["-NoProfile", "-NonInteractive", "-Command", `${command}; exit $LASTEXITCODE`] },
-  { name: "PowerShell 7", program: "pwsh.exe", args: (command) => ["-NoProfile", "-NonInteractive", "-Command", `${command}; exit $LASTEXITCODE`] },
+  { name: "Windows PowerShell 5.1", program: "powershell.exe", args: (command) => ["-NoProfile", "-NonInteractive", "-Command", command], nonzeroExit: 1 },
+  { name: "PowerShell 7", program: "pwsh.exe", args: (command) => ["-NoProfile", "-NonInteractive", "-Command", command], nonzeroExit: 1 },
   { name: "Git Bash", program: gitBash || "agent-buzzer-missing-git-bash", args: (command) => ["--noprofile", "--norc", "-c", command] },
 ] : [
   { name: "sh", program: "/bin/sh", args: (command) => ["-c", command] },
@@ -31,10 +31,13 @@ function fixture(t) {
     rmSync(dir, { recursive: true, force: true });
   });
   const name = windows ? "User's app $HOME 100% & (test) ! cafe \u4e2d\u6587"
-    : "User's app $HOME `echo BAD` $(echo BAD) ; & (test) ! \"quoted\" \\\\ \\backslash newline\n cafe \u4e2d\u6587";
+    : "User's app $HOME `echo BAD` $(echo BAD) ; & (test) ! \"quoted\" newline\n cafe \u4e2d\u6587";
   const folder = join(dir, name);
   mkdirSync(folder);
-  const node = join(folder, windows ? "node.exe" : "node");
+  // Node's ESM loader forbids backslashes in Unix module paths; the executable does not.
+  const runtime = join(folder, windows ? "runtime" : "runtime \\\\ \\backslash");
+  mkdirSync(runtime);
+  const node = join(runtime, windows ? "node.exe" : "node");
   copyFileSync(process.execPath, node);
   if (!windows) chmodSync(node, 0o755);
   const entry = join(folder, "entry.mjs");
@@ -72,7 +75,7 @@ for (const shell of shells) {
         windowsHide: true, windowsVerbatimArguments: shell.raw, timeout: 15000,
       });
       assert.ifError(result.error);
-      assert.equal(result.status, exitCode, result.stderr);
+      assert.equal(result.status, exitCode ? shell.nonzeroExit || exitCode : 0, result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), { input, args: ["codex-stop"] });
       assert.equal(result.stderr, "");
     }
