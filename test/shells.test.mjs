@@ -120,7 +120,7 @@ test("Hermes subprocess preserves paths and UTF-8 payloads without a shell", (t)
   const files = fixture(t);
   const capture = join(files.dir, "hermes.json");
   const script = "import importlib.util,os,pathlib; spec=importlib.util.spec_from_file_location('buzzer',os.environ['TEST_HERMES_PLUGIN']); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.NODE_BINARY=os.environ['TEST_NODE']; m.ENTRY=pathlib.Path(os.environ['TEST_ENTRY']); m._send('completed',os.environ['TEST_SUMMARY'],'session','turn')";
-  const result = spawnSync(python, ["-c", script], { encoding: "utf8", windowsHide: true, timeout: 15000, env: {
+  const result = spawnSync(python, ["-B", "-c", script], { encoding: "utf8", windowsHide: true, timeout: 15000, env: {
     ...process.env, TEST_HERMES_PLUGIN: join(ROOT, "plugins", "hermes", "__init__.py"),
     TEST_NODE: files.node, TEST_ENTRY: files.entry, TEST_SUMMARY: JSON.parse(input).last_assistant_message, TEST_CAPTURE_FILE: capture,
   } });
