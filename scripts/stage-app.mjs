@@ -20,6 +20,8 @@ for (const size of [16, 24, 32, 48, 64, 96, 128, 256, 512]) {
 for (const name of ["bin", "src", "scripts", "plugins", "package.json"]) {
   cpSync(join(ROOT, name), join(target, name), { recursive: true });
 }
+mkdirSync(join(target, "node_modules"), { recursive: true });
+cpSync(join(ROOT, "node_modules", "nodemailer"), join(target, "node_modules", "nodemailer"), { recursive: true });
 writeFileSync(join(target, "src", "icon.png"), renderIcon(256));
 mkdirSync(join(target, ".agents", "plugins"), { recursive: true });
 copyFileSync(join(ROOT, ".agents", "plugins", "marketplace.json"), join(target, ".agents", "plugins", "marketplace.json"));

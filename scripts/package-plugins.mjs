@@ -29,6 +29,8 @@ function bundle(source, destination) {
   cpSync(join(ROOT, "scripts"), join(destination, "scripts"), { recursive: true, force: true });
   cpSync(join(ROOT, "plugins"), join(destination, "plugins"), { recursive: true, force: true });
   cpSync(join(ROOT, "package.json"), join(destination, "package.json"), { force: true });
+  mkdirSync(join(destination, "node_modules"), { recursive: true });
+  cpSync(join(ROOT, "node_modules", "nodemailer"), join(destination, "node_modules", "nodemailer"), { recursive: true, force: true });
   for (const [folder, file] of [[".agents/plugins", "marketplace.json"], [".github/plugin", "marketplace.json"]]) {
     const target = join(destination, folder);
     mkdirSync(target, { recursive: true });

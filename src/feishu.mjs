@@ -9,12 +9,13 @@ async function postJson(url, payload, headers, fetchImpl) {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8000),
     });
-  } catch (error) {
-    throw new Error(`Feishu request failed: ${error.message}`);
+  } catch {
+    throw new Error("Feishu request failed");
   }
   if (!response.ok) throw new Error(`Feishu HTTP ${response.status}`);
-  const result = await response.json();
-  if (result.code !== 0) throw new Error(`Feishu API ${result.code}: ${result.msg || "unknown error"}`);
+  let result;
+  try { result = await response.json(); } catch { throw new Error("Feishu returned an invalid response"); }
+  if (result.code !== 0) throw new Error("Feishu rejected the notification");
   return result;
 }
 

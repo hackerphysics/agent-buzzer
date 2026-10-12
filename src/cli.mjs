@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { buildCard } from "./card.mjs";
-import { loadConfig, readSettings, saveSettings } from "./config.mjs";
+import { loadConfig, readSettings, safeChannelSettings, saveSettings } from "./config.mjs";
 import { fromCodexPermission, fromCodexStop, fromCopilotNotification, fromCopilotStop, fromHermes, waitForCopilotReply } from "./adapters.mjs";
 import { getTenantToken } from "./feishu.mjs";
-import { saveSecret } from "./secret-store.mjs";
+import { saveCredentials } from "./secret-store.mjs";
 import { ensureService, submitEvent } from "./client.mjs";
 import { BASE_URL, createService } from "./service.mjs";
 
@@ -94,18 +94,19 @@ export async function main(args) {
   }
   if (command === "store-secret") {
     const secret = (await readInputText()).trim();
-    saveSecret(secret);
+    saveCredentials({ "feishu.secret": secret });
     console.log("Feishu App Secret stored in this user's credential store.");
     return;
   }
   if (command === "doctor") {
-    const config = loadConfig();
+    const config = loadConfig(process.env, { includeSecret: false });
+    const channels = safeChannelSettings();
     console.log(JSON.stringify({
       deviceName: config.deviceName,
       feishuAppIdConfigured: Boolean(config.feishu.appId),
-      feishuAppSecretConfigured: Boolean(config.feishu.appSecret),
+      feishuAppSecretConfigured: channels.feishu.secretConfigured,
       feishuRecipientConfigured: Boolean(config.feishu.receiveId),
-      channels: Object.fromEntries(Object.entries(config.channels).map(([name, value]) => [name, { enabled: value.enabled, configured: name === "feishu" ? Boolean(value.appId && value.appSecret && value.receiveId) : Boolean(value.url) }])),
+      channels: Object.fromEntries(Object.entries(channels).map(([name, value]) => [name, { enabled: value.enabled, configured: value.configured }])),
       notifications: config.notifications,
     }, null, 2));
     return;

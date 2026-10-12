@@ -74,7 +74,10 @@ export function purgeDisabled(notifications, channels, env = process.env) {
     } else if (entry.pendingChannels) {
       const remaining = entry.pendingChannels.filter((name) => channels[name]?.enabled);
       if (!remaining.length) { removeEntry(entry); count++; }
-      else if (remaining.length !== entry.pendingChannels.length) updateEntry({ ...entry, pendingChannels: remaining });
+      else if (remaining.length !== entry.pendingChannels.length) {
+        const retries = entry.channelRetries ? Object.fromEntries(remaining.filter((name) => entry.channelRetries[name]).map((name) => [name, entry.channelRetries[name]])) : undefined;
+        updateEntry({ ...entry, pendingChannels: remaining, ...(retries ? { channelRetries: retries, nextAttemptAt: Math.min(...remaining.map((name) => retries[name]?.nextAttemptAt || 0)) } : {}) });
+      }
     }
   }
   return count;

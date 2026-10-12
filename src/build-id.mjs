@@ -11,6 +11,9 @@ export function buildId(root) {
       else if (entry.isFile()) { hash.update(name); hash.update(readFileSync(join(root, name))); }
     }
   }
-  for (const name of ["src", "scripts", "plugins"]) if (existsSync(join(root, name))) add(name);
+  for (const name of ["bin", "src", "scripts", "plugins"]) if (existsSync(join(root, name))) add(name);
+  for (const name of ["package.json", "node_modules/nodemailer/package.json"]) {
+    if (existsSync(join(root, name))) { hash.update(name); hash.update(readFileSync(join(root, name))); }
+  }
   return hash.digest("hex").slice(0, 12);
 }

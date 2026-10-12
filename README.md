@@ -1,6 +1,6 @@
 # AgentBuzzer
 
-AgentBuzzer receives completion and approval events from Codex, GitHub Copilot, and Hermes. A local background service decides when to deliver them through Feishu, a generic HTTPS webhook, or Slack Incoming Webhooks. The desktop app has separate pages for overview, timing, channels, and adapter installation.
+AgentBuzzer receives completion and approval events from Codex, GitHub Copilot, and Hermes. A shared local background service routes notifications to 20 configurable channel types. The desktop app has separate pages for overview, timing, individual channel configuration, and adapter installation.
 
 ## Install
 
@@ -58,9 +58,44 @@ Codex hook diagnostics are written to `~/.agent-buzzer/codex-hook.log` (beside t
 
 ## Settings
 
-Set the device name and enable one or more channels on the **Channels** page. Feishu needs a bot-enabled app with `im:message` permission, an App ID, App Secret, and a recipient ID (`chat_id`, `open_id`, `user_id`, or `email`). Generic webhook accepts an HTTPS URL and receives JSON `{ "event": { "agent": "...", "status": "...", "summary": "..." }, "deviceName": "..." }`. Slack requires a Slack Incoming Webhook URL. Slack messages are sent as JSON with a `text` field. Endpoint URLs are not returned by the local settings API.
+Set the device name and choose a channel on the **Channels** page. Each channel has independent configuration, enable/disable controls, a scoped test button, and its last delivery status. Desktop uses a grouped channel list; mobile uses a selector. Unsaved drafts stay in memory while switching channels, not in browser storage.
 
-Settings and queued events are stored under `~/.agent-buzzer`, never in the repository. Existing Feishu settings are read automatically. Feishu App Secret uses Windows DPAPI; on macOS/Linux it is stored in a `0600` user-only file, not encrypted by the OS keychain. You can instead supply `AGENTBUZZER_FEISHU_APP_SECRET` in the service environment. Webhook URLs in the per-user `config.json` are sensitive bearer credentials; restrict access to that file and do not commit it. `AGENTBUZZER_WEBHOOK_URL` and `AGENTBUZZER_SLACK_WEBHOOK_URL` are also supported. The service listens on loopback only and rejects cross-origin browser requests.
+| Channel | Required configuration |
+| --- | --- |
+| Feishu application | App ID, App Secret, recipient type and ID; bot needs `im:message` permission |
+| Feishu group bot | Group-bot webhook; optional signing secret |
+| Slack | Incoming Webhook URL |
+| Telegram | Bot Token, Chat ID; optional forum Topic ID |
+| Discord | Channel webhook; automatic mentions are disabled |
+| Microsoft Teams | Power Automate Workflows webhook accepting Adaptive Cards, with anonymous caller access |
+| Google Chat | Space webhook URL containing its key and token |
+| Mattermost | Incoming webhook URL |
+| DingTalk | Robot webhook; optional HMAC signing secret |
+| WeCom | Group robot webhook URL |
+| Matrix | Homeserver, Room ID and access token; unencrypted rooms only |
+| LINE | Channel access token and user/group/room ID |
+| ntfy | Server and topic; optional access token |
+| Bark | Server and device key |
+| Gotify | Server, application token and priority |
+| Pushover | Application token and user key; optional device |
+| Email SMTP | Host, port, STARTTLS/TLS, sender and recipient; optional password/App Password authentication |
+| Twilio SMS | Account SID, Auth Token, registered sender and recipient in E.164 format |
+| Generic webhook | HTTPS URL; optional Bearer Token |
+| Hermes send bridge | Hermes executable and configured delivery target, such as `signal:+...` or `whatsapp:...` |
+
+New channels are disabled by default. Tests target only the selected saved channel and obey the same off/DND/work-hours policy as real events. Turning notifications off discards a test rather than sending it. SMS tests request confirmation because Twilio may charge per message segment; no test credentials are supplied or created automatically.
+
+Teams uses Workflows, not retired Office 365 connectors. Matrix checks room encryption before sending and refuses encrypted rooms; use a configured encryption-capable gateway for those rooms. Robot keyword allowlists must match the outgoing text, which includes `AgentBuzzer`. SMTP requires verified TLS or STARTTLS; anonymous TLS relays and password/App Password authentication are supported, not an OAuth onboarding flow. Public self-hosted servers require HTTPS; loopback `localhost`, `127.0.0.1` and `::1` may use HTTP.
+
+The optional Hermes bridge invokes `hermes send --to <target> --file - --quiet` with an argument array and the message on stdin. It does not copy Hermes credentials or start a model conversation. The installed Hermes version must provide `hermes send`, and its target must already be configured. On Windows use a native executable, such as the Python-installed `hermes.exe`, rather than a `.cmd` shim. Known media/file directives are neutralized so notification summaries cannot request file attachments. WhatsApp and Signal support here depends on that external gateway; personal WeChat, QQ, iMessage and other account/session-based integrations are not advertised as native senders.
+
+Generic webhooks receive `{ "event": { "agent": "...", "status": "...", "summary": "..." }, "deviceName": "..." }`. Provider HTTP/business failures stay in the durable queue. Retry schedules are per channel and honor HTTP `Retry-After` and Telegram/Discord rate-limit responses. Matrix and LINE reuse transaction keys on retries. A provider acknowledgement is not a read receipt, and an already-in-flight remote request cannot be recalled when a switch is turned off.
+
+The channel/gateway split is informed by [OpenClaw's channel catalog](https://github.com/openclaw/openclaw/blob/main/docs/channels/index.md) and [Hermes's one-shot send interface](https://github.com/nousresearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md). This app implements outbound task notifications, not their full two-way chat gateways.
+
+Settings and queued events are stored under `~/.agent-buzzer`, never in the repository. Existing Feishu settings and legacy credential files are read automatically. New tokens, passwords and webhook URLs are stored in `credentials.json`, encrypted with Windows DPAPI or protected by `0600` user-only file permissions on macOS/Linux (not OS-keychain encryption). With `AGENTBUZZER_CONFIG`, the credential file lives beside that config. Metadata records only which credential fields exist, so settings refreshes and hooks do not decrypt credentials. Legacy plaintext webhook URLs remain readable for compatibility and move to the credential store when edited and saved.
+
+Credential-bearing URLs, tokens and passwords are never returned by the settings API. Non-secret server addresses and recipient IDs remain visible for editing. Environment variables override saved credentials; GUI credential inputs managed by the environment are read-only. Existing `AGENTBUZZER_FEISHU_APP_SECRET`, `AGENTBUZZER_WEBHOOK_URL` and `AGENTBUZZER_SLACK_WEBHOOK_URL` continue to work. Other fields use `AGENTBUZZER_<CHANNEL>_<FIELD>`, for example `AGENTBUZZER_TELEGRAM_BOT_TOKEN`, `AGENTBUZZER_TELEGRAM_CHAT_ID`, or `AGENTBUZZER_EMAIL_PASSWORD`. Clearing a saved credential does not remove an environment variable. The service listens on loopback only and rejects cross-origin browser requests.
 
 Useful CLI commands:
 

@@ -7,11 +7,19 @@ let currentSettings;
 let pendingRemoval;
 let refreshing = false;
 let adaptersChecking = true;
+let channelCatalog = [];
+let selectedChannel = location.hash.slice(1).split("/")[1] || "feishu";
+let pendingTestChannel;
+let deliveryStates = {};
+const channelDrafts = new Map();
 const pageTitles = { overview: "概览", timing: "时间策略", channels: "通知通道", adapters: "适配器" };
-let currentPage = pageTitles[location.hash.slice(1)] ? location.hash.slice(1) : "overview";
+let currentPage = pageTitles[location.hash.slice(1).split("/")[0]] ? location.hash.slice(1).split("/")[0] : "overview";
 
 function selectPage(page) {
+  const requested = page.split("/");
+  page = requested[0];
   currentPage = pageTitles[page] ? page : "overview";
+  if (currentPage === "channels" && channelCatalog.some(({ id }) => id === requested[1])) selectedChannel = requested[1];
   for (const name of Object.keys(pageTitles)) $("page-" + name).hidden = name !== currentPage;
   for (const button of document.querySelectorAll(".nav-item")) {
     const selected = button.dataset.page === currentPage;
@@ -21,6 +29,7 @@ function selectPage(page) {
   }
   $("page-title").textContent = pageTitles[currentPage];
   $("feedback").textContent = "";
+  if (loaded && currentPage === "channels") renderChannelEditor();
   if (loaded) void refresh();
 }
 
@@ -75,48 +84,25 @@ function fill(settings) {
   $("work-minutes").value = settings.notifications.cycle.workMinutes;
   $("break-minutes").value = settings.notifications.cycle.breakMinutes;
   $("device-name").value = settings.deviceName;
-  $("feishu-enabled").checked = settings.channels.feishu.enabled;
-  $("webhook-enabled").checked = settings.channels.webhook.enabled;
-  $("slack-enabled").checked = settings.channels.slack.enabled;
-  $("app-id").value = settings.channels.feishu.appId;
-  $("recipient-type").value = settings.channels.feishu.receiveIdType;
-  $("recipient-id").value = settings.channels.feishu.receiveId;
-  $("app-secret").value = "";
-  $("webhook-url").value = "";
-  $("slack-url").value = "";
-  $("secret-state").textContent = settings.channels.feishu.secretConfigured ? "密钥已配置" : "密钥未配置";
-  $("webhook-state").textContent = settings.channels.webhook.urlConfigured ? "地址已配置" : "地址未配置";
-  $("slack-state").textContent = settings.channels.slack.urlConfigured ? "地址已配置" : "地址未配置";
   if (!loaded) renderChoices(settings);
   else {
     for (const [agent, key] of agentNames) $(`agent-${key}`).checked = settings.notifications.agents[agent];
     for (const day of $("weekdays").querySelectorAll("input")) day.checked = settings.notifications.workHours.days.includes(Number(day.value));
   }
   loaded = true;
+  $("save-device").disabled = false;
   for (const control of document.querySelectorAll(".page input, .page select, .primary-button")) control.disabled = false;
+  renderChannelEditor();
   showFields();
 }
 
 function showFields() {
   $("hours-fields").hidden = !$("hours-enabled").checked;
   $("cycle-fields").hidden = !$("cycle-enabled").checked;
-  for (const name of ["feishu", "webhook", "slack"]) $(`${name}-fields`).hidden = !$(`${name}-enabled`).checked;
 }
 
 function formData() {
   return {
-    deviceName: $("device-name").value.trim(),
-    channels: {
-      feishu: {
-        enabled: $("feishu-enabled").checked,
-        appId: $("app-id").value.trim(),
-        receiveId: $("recipient-id").value.trim(),
-        receiveIdType: $("recipient-type").value,
-        ...($("app-secret").value ? { secret: $("app-secret").value } : {}),
-      },
-      webhook: { enabled: $("webhook-enabled").checked, ...($("webhook-url").value ? { url: $("webhook-url").value.trim() } : {}) },
-      slack: { enabled: $("slack-enabled").checked, ...($("slack-url").value ? { url: $("slack-url").value.trim() } : {}) },
-    },
     notifications: {
       enabled: $("enabled").checked,
       dnd: $("dnd").checked,
@@ -138,7 +124,7 @@ function formData() {
 
 async function api(path, options) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), path.startsWith("/api/install/") || path.startsWith("/api/uninstall/") ? 125000 : 10000);
+  const timer = setTimeout(() => controller.abort(), path.startsWith("/api/install/") || path.startsWith("/api/uninstall/") ? 125000 : options?.method === "PUT" ? 30000 : 10000);
   try {
     const response = await fetch(path, { ...options, signal: controller.signal, cache: "no-store" });
     const data = await response.json();
@@ -159,11 +145,139 @@ async function save() {
   try {
     const data = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData()) });
     currentSettings = data.settings;
-    fill(data.settings);
+    for (const [key, value] of Object.entries(data.settings.notifications)) currentSettings.notifications[key] = value;
     $("feedback").textContent = data.discarded ? `已保存，丢弃 ${data.discarded} 条待发消息` : "已保存";
     await refresh();
   } catch (error) { $("feedback").textContent = error.message; }
   finally { saving = false; $("save").disabled = false; $("save-timing").disabled = false; }
+}
+
+function renderChannelNavigation() {
+  const list = $("channel-list");
+  const scroll = list.scrollTop;
+  const picker = $("channel-picker");
+  list.replaceChildren(); picker.replaceChildren();
+  let group;
+  for (const definition of channelCatalog) {
+    if (group !== definition.group) { group = definition.group; list.append(element("h3", "channel-group", group)); }
+    const status = currentSettings.channels[definition.id];
+    const button = element("button", "channel-tab", definition.label);
+    button.type = "button";
+    button.dataset.channel = definition.id;
+    button.classList.toggle("active", definition.id === selectedChannel);
+    button.classList.toggle("channel-on", status.enabled);
+    button.setAttribute("aria-current", definition.id === selectedChannel ? "page" : "false");
+    button.addEventListener("click", () => {
+      selectedChannel = definition.id;
+      location.hash = `channels/${definition.id}`;
+      renderChannelEditor();
+    });
+    list.append(button);
+    const option = element("option", null, definition.label);
+    option.value = definition.id; picker.append(option);
+  }
+  picker.value = selectedChannel;
+  list.scrollTop = scroll;
+}
+
+function renderChannelResult() {
+  const status = deliveryStates[selectedChannel];
+  $("channel-result").classList.toggle("failed", status?.state === "failed");
+  $("channel-result").textContent = !status ? "" : `${status.state === "sent" ? "已投递" : status.state === "sending" ? "投递中" : status.reason === "MATRIX_ENCRYPTED_ROOM" ? "Matrix 加密房间不支持直接投递" : "投递失败，待重试"}${status.httpStatus ? ` · HTTP ${status.httpStatus}` : ""} · ${new Date(status.time).toLocaleTimeString()}`;
+}
+
+function renderChannelEditor() {
+  if (!channelCatalog.length || !currentSettings) return;
+  if (!channelCatalog.some(({ id }) => id === selectedChannel)) selectedChannel = channelCatalog[0].id;
+  renderChannelNavigation();
+  const definition = channelCatalog.find(({ id }) => id === selectedChannel);
+  const status = currentSettings.channels[selectedChannel];
+  const draft = channelDrafts.get(selectedChannel) || {};
+  $("channel-title").textContent = definition.label;
+  $("channel-state").textContent = status.enabled ? status.configured ? "已启用" : "待配置" : "已关闭";
+  $("channel-enabled").checked = draft.enabled ?? status.enabled;
+  $("channel-enabled").disabled = false;
+  const fields = $("channel-fields"); fields.replaceChildren();
+  for (const spec of definition.fields) {
+    const label = element("label", "channel-field");
+    const caption = element("span", "field-caption", spec.required ? spec.label : `${spec.label}（可选）`);
+    const input = element(spec.type === "select" ? "select" : "input");
+    input.id = `channel-${selectedChannel}-${spec.name}`;
+    input.name = spec.name;
+    input.setAttribute("aria-label", spec.label);
+    label.htmlFor = input.id;
+    if (spec.options) for (const option of spec.options) { const node = element("option", null, option); node.value = option; input.append(node); }
+    else input.type = spec.type;
+    if (spec.min !== undefined) input.min = String(spec.min);
+    if (spec.max !== undefined) input.max = String(spec.max);
+    input.autocomplete = spec.secret ? "new-password" : "off";
+    input.value = draft[spec.name] ?? (spec.secret ? "" : status[spec.name] ?? spec.default ?? "");
+    input.placeholder = spec.secret && status[`${spec.name}Configured`] ? "保持不变" : "";
+    if (spec.secret) {
+      const presence = element("small", "credential-state", draft[spec.name] === null ? "待清除" : status[`${spec.name}FromEnv`] ? "环境变量" : status[`${spec.name}Configured`] ? "已配置" : "未配置");
+      presence.id = `${input.id}-state`;
+      input.setAttribute("aria-describedby", presence.id);
+      input.disabled = status[`${spec.name}FromEnv`] === true;
+      caption.append(presence);
+      if (status[`${spec.name}Configured`] && !status[`${spec.name}FromEnv`]) {
+        const clear = element("button", "text-button clear-credential", "清除");
+        clear.type = "button";
+        clear.setAttribute("aria-label", `清除 ${spec.label}`);
+        clear.addEventListener("click", () => {
+          channelDrafts.set(selectedChannel, { ...collectChannel(), [spec.name]: null, ...(spec.required ? { enabled: false } : {}) });
+          renderChannelEditor();
+        });
+        caption.append(clear);
+      }
+    }
+    input.addEventListener("input", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; });
+    input.addEventListener("change", () => { channelDrafts.set(selectedChannel, collectChannel()); $("test-channel").disabled = true; });
+    label.append(caption, input); fields.append(label);
+  }
+  $("save").disabled = saving;
+  $("test-channel").disabled = saving || !status.enabled || !status.configured || channelDrafts.has(selectedChannel);
+  renderChannelResult();
+}
+
+function collectChannel() {
+  const definition = channelCatalog.find(({ id }) => id === selectedChannel);
+  const draft = channelDrafts.get(selectedChannel) || {};
+  const value = { enabled: $("channel-enabled").checked };
+  for (const spec of definition.fields) {
+    const text = $(`channel-${selectedChannel}-${spec.name}`).value;
+    if (spec.secret) { if (text) value[spec.name] = text; else if (draft[spec.name] === null) value[spec.name] = null; }
+    else value[spec.name] = spec.type === "number" && text !== "" ? Number(text) : text.trim();
+  }
+  return value;
+}
+
+async function saveChannel(payload = collectChannel()) {
+  if (saving) return;
+  const channel = selectedChannel;
+  saving = true; $("save").disabled = true; $("channel-enabled").disabled = true;
+  $("feedback").textContent = "保存中…";
+  try {
+    const result = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channels: { [channel]: payload } }) });
+    currentSettings = result.settings;
+    channelDrafts.delete(channel);
+    $("feedback").textContent = result.discarded ? `已保存，丢弃 ${result.discarded} 条待发消息` : "已保存";
+    renderChannelEditor();
+    await refresh();
+  } catch (error) {
+    $("feedback").textContent = error.message;
+    $("channel-enabled").checked = currentSettings.channels[channel].enabled;
+  } finally { saving = false; renderChannelEditor(); }
+}
+
+async function testChannel(channel = selectedChannel) {
+  if (saving) return;
+  $("test-channel").disabled = true;
+  try {
+    const result = await api(`/api/channels/${channel}/test`, { method: "POST" });
+    $("feedback").textContent = result.disposition === "dropped" ? "测试通知已丢弃" : "测试通知已加入队列";
+    await refresh();
+  } catch (error) { $("feedback").textContent = error.message; }
+  finally { renderChannelEditor(); }
 }
 
 async function quickSwitch(id) {
@@ -201,7 +315,7 @@ function renderQueue(queue) {
     const top = element("div", "queue-top");
     top.append(element("b", null, entry.agent), element("time", null, new Date(entry.createdAt).toLocaleString()));
     row.append(top, element("p", null, entry.summary));
-    if (entry.pendingChannels?.length) row.append(element("small", "muted", entry.pendingChannels.join(" · ")));
+    if (entry.pendingChannels?.length) row.append(element("small", "muted", entry.pendingChannels.map((name) => channelCatalog.find(({ id }) => id === name)?.label || name).join(" · ")));
     if (entry.attempts) row.append(element("small", "muted", `重试 ${entry.attempts} 次`));
     container.append(row);
   }
@@ -293,7 +407,10 @@ async function refresh() {
       delete $("feedback").dataset.networkError;
     }
     currentSettings = data.settings;
+    channelCatalog = data.channelCatalog || [];
+    deliveryStates = data.channelDelivery || {};
     if (!loaded) fill(data.settings);
+    else { renderChannelNavigation(); renderChannelResult(); }
     renderQueue(data.queue);
     adaptersChecking = data.adaptersChecking === true;
     renderAdapters(data.adapters, adaptersChecking, data.adaptersError);
@@ -315,17 +432,34 @@ async function refresh() {
   } finally { refreshing = false; }
 }
 
-for (const id of ["enabled", "dnd", "feishu-enabled", "webhook-enabled", "slack-enabled"]) {
+for (const id of ["enabled", "dnd"]) {
   $(id).addEventListener("change", () => { showFields(); void quickSwitch(id); });
 }
 for (const id of ["hours-enabled", "cycle-enabled"]) $(id).addEventListener("change", showFields);
-$("save").addEventListener("click", save);
+$("channel-form").addEventListener("submit", (event) => { event.preventDefault(); void saveChannel(); });
+$("channel-enabled").addEventListener("change", () => { if (saving) return; void saveChannel($("channel-enabled").checked ? collectChannel() : { enabled: false }); });
+$("channel-picker").addEventListener("change", () => { selectedChannel = $("channel-picker").value; location.hash = `channels/${selectedChannel}`; renderChannelEditor(); });
+$("test-channel").addEventListener("click", () => {
+  if (channelCatalog.find(({ id }) => id === selectedChannel)?.paid) { pendingTestChannel = selectedChannel; $("test-dialog").returnValue = ""; $("test-dialog").showModal(); }
+  else void testChannel();
+});
+$("test-dialog").addEventListener("close", () => { const channel = pendingTestChannel; pendingTestChannel = null; if ($("test-dialog").returnValue === "send" && channel) void testChannel(channel); });
+$("save-device").addEventListener("click", async () => {
+  $("save-device").disabled = true;
+  try {
+    const result = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceName: $("device-name").value.trim() }) });
+    currentSettings = result.settings; $("feedback").textContent = "设备名称已保存";
+  } catch (error) { $("feedback").textContent = error.message; }
+  finally { $("save-device").disabled = false; }
+});
 $("save-timing").addEventListener("click", save);
 $("refresh").addEventListener("click", refresh);
 for (const button of document.querySelectorAll(".nav-item")) button.addEventListener("click", () => { location.hash = button.dataset.page; selectPage(button.dataset.page); });
 window.addEventListener("hashchange", () => selectPage(location.hash.slice(1)));
 selectPage(currentPage);
 for (const control of document.querySelectorAll(".page input, .page select, .primary-button")) control.disabled = true;
+$("save-device").disabled = true;
+$("test-channel").disabled = true;
 void refresh();
 setInterval(() => { if (!saving) void refresh(); }, 8000);
 setInterval(() => { if (adaptersChecking && !saving) void refresh(); }, 1000);

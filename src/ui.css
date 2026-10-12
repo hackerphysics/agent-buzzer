@@ -43,6 +43,30 @@ small, .muted { display: block; color: #73807b; font-size: 12px; margin-top: 4px
 .channel-block { margin-top: 18px; }
 .channel-block .row { min-height: 55px; }
 .channel-fields { padding: 0 0 14px 12px; border-left: 2px solid #dce8e2; margin-top: 12px; }
+.device-settings { display: flex; align-items: flex-end; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid #dce3e0; margin-bottom: 22px; }
+.device-settings label { flex: 1; min-width: 0; font-size: 12px; color: #52605b; }
+.device-settings button { flex-shrink: 0; }
+.channel-layout { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 25px; align-items: start; }
+.channel-list { display: flex; flex-direction: column; border-right: 1px solid #dce3e0; padding-right: 12px; max-height: calc(100vh - 260px); min-height: 200px; overflow-y: auto; scrollbar-gutter: stable; }
+.channel-group { font-size: 11px; color: #73807b; margin: 16px 0 7px; font-weight: 600; }
+.channel-group:first-child { margin-top: 0; }
+.channel-tab { text-align: left; border: 0; border-radius: 4px; color: #465650; background: transparent; padding: 9px 8px; font-size: 12px; overflow-wrap: anywhere; }
+.channel-tab:hover { background: #edf2ef; }
+.channel-tab.active { background: #e0eee7; color: #14533e; font-weight: 600; }
+.channel-tab.channel-on::after { content: ''; display: inline-block; width: 5px; height: 5px; background: #08745b; margin-left: 7px; border-radius: 50%; vertical-align: 2px; }
+.channel-tab:focus-visible { outline: 2px solid #08745b; outline-offset: 1px; }
+.channel-heading { min-height: 58px; padding-bottom: 12px; }
+.channel-heading h2 { font-size: 16px; margin: 0; }
+.channel-field { min-width: 0; }
+.field-caption { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.credential-state { color: #73807b; font-weight: 400; font-size: 11px; }
+.clear-credential { font-size: 11px; margin-left: auto; padding: 0; }
+.channel-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.channel-actions .primary-button { margin-top: 0; }
+.channel-result { min-height: 20px; font-size: 12px; color: #426d5c; line-height: 1.5; margin-top: 16px; overflow-wrap: anywhere; }
+.channel-result.failed { color: #9b3434; }
+.mobile-channel-picker { display: none; }
+@media (max-width: 600px) { .channel-layout { display: block; } .channel-list { display: none; } .mobile-channel-picker { display: block; margin-bottom: 20px; font-size: 12px; color: #52605b; } .device-settings { gap: 8px; } .device-settings button { padding: 6px 8px; font-size: 12px; } }
 .fields label, .field-pair label { color: #52605b; font-size: 12px; font-weight: 550; }
 input:not([type="checkbox"]), select { display: block; width: 100%; height: 36px; margin-top: 6px; padding: 0 10px; background: #fff; color: #20282a; border: 1px solid #cbd7d0; border-radius: 4px; outline: 0; }
 input:focus, select:focus { border-color: #08745b; box-shadow: 0 0 0 2px #b9ded1; }

@@ -1,14 +1,15 @@
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import { AGENTS, CHANNELS, loadConfig, readSettings, saveSettings } from "./config.mjs";
-import { activeChannels, sendChannel, validateEndpoint } from "./channels.mjs";
+import { AGENTS, CHANNELS, loadChannelConfig, loadConfig, readSettings, safeChannelSettings, saveSettings } from "./config.mjs";
+import { activeChannels, sendChannel } from "./channels.mjs";
+import { CHANNEL_CATALOG, channelDefinition, channelEnv, validateField } from "./channel-schema.mjs";
 import { advanceCycle, deliveryDecision, ingressDecision, resetBreak, validateNotifications } from "./policy.mjs";
 import { dataPath, listEntries, makeEntry, persistEntry, purgeAgent, purgeDisabled, removeEntry, updateEntry } from "./queue.mjs";
-import { hasSecret, saveSecret } from "./secret-store.mjs";
+import { credentialKeys, hasSecret, saveCredentials } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
 import { runCommand as executeCommand } from "./commands.mjs";
 
@@ -53,16 +54,7 @@ function safeSettings(env) {
   return {
     deviceName: config.deviceName,
     notifications: config.notifications,
-    channels: {
-      feishu: {
-        enabled: config.channels.feishu.enabled,
-        appId: config.feishu.appId || "", receiveId: config.feishu.receiveId || "",
-        receiveIdType: config.feishu.receiveIdType,
-        secretConfigured: Boolean(env.AGENTBUZZER_FEISHU_APP_SECRET || hasSecret()),
-      },
-      webhook: { enabled: config.channels.webhook.enabled, urlConfigured: Boolean(config.channels.webhook.url) },
-      slack: { enabled: config.channels.slack.enabled, urlConfigured: Boolean(config.channels.slack.url) },
-    },
+    channels: safeChannelSettings(env),
   };
 }
 
@@ -106,6 +98,21 @@ export function createService({ env = process.env, deliver = sendChannel, detect
   let statusError = null;
   let statusGeneration = 0;
   const uninstallingAgents = new Set();
+  const channelDelivery = {};
+
+  function saveProgress(entry) {
+    if (!existsSync(entry.path)) return false;
+    const current = loadConfig(env, { includeSecret: false });
+    if (deliveryDecision(current.notifications, entry.event.agent, cycle.phase, now()) === "drop") { removeEntry(entry); return false; }
+    entry.pendingChannels = entry.pendingChannels.filter((name) => current.channels[name]?.enabled);
+    if (!entry.pendingChannels.length) { removeEntry(entry); return false; }
+    if (entry.channelRetries) {
+      entry.channelRetries = Object.fromEntries(entry.pendingChannels.filter((name) => entry.channelRetries[name]).map((name) => [name, entry.channelRetries[name]]));
+      entry.nextAttemptAt = Math.min(...entry.pendingChannels.map((name) => entry.channelRetries[name]?.nextAttemptAt || 0));
+    }
+    updateEntry(entry);
+    return true;
+  }
 
   function syncCycle() {
     const next = advanceCycle(loadConfig(env, { includeSecret: false }).notifications.cycle, cycle, now().getTime());
@@ -128,20 +135,34 @@ export function createService({ env = process.env, deliver = sendChannel, detect
         if (decision === "wait" || entry.nextAttemptAt > now().getTime()) continue;
         entry.pendingChannels ||= activeChannels(config.channels);
         for (const channel of [...entry.pendingChannels]) {
-          if (!config.channels[channel]?.enabled) {
+          if (!existsSync(entry.path) || uninstallingAgents.has(entry.event.agent)) break;
+          const current = loadConfig(env, { includeSecret: false });
+          const currentDecision = deliveryDecision(current.notifications, entry.event.agent, cycle.phase, now());
+          if (currentDecision === "drop") { removeEntry(entry); break; }
+          if (currentDecision === "wait" || closing) break;
+          if (!current.channels[channel]?.enabled) {
             entry.pendingChannels = entry.pendingChannels.filter((name) => name !== channel);
-            updateEntry(entry);
+            if (!saveProgress(entry)) break;
             continue;
           }
+          entry.channelRetries ||= {};
+          const retry = entry.channelRetries[channel];
+          if (retry?.nextAttemptAt > now().getTime()) continue;
           try {
-            const channelConfig = channel === "feishu" ? loadConfig(env).channels.feishu : config.channels[channel];
-            await deliver(channel, channelConfig, entry.event, config.deviceName);
+            const channelConfig = loadChannelConfig(channel, env);
+            channelDelivery[channel] = { state: "sending", time: now().toISOString() };
+            await deliver(channel, channelConfig, entry.event, current.deviceName, undefined, { deliveryId: entry.id });
+            channelDelivery[channel] = { state: "sent", time: now().toISOString() };
             entry.pendingChannels = entry.pendingChannels.filter((name) => name !== channel);
-            updateEntry(entry);
+            delete entry.channelRetries[channel];
+            if (!saveProgress(entry)) break;
           } catch (error) {
             entry.attempts++;
-            entry.nextAttemptAt = now().getTime() + Math.min(300000, 2000 * 2 ** Math.min(entry.attempts - 1, 8));
-            updateEntry(entry);
+            const attempts = (retry?.attempts || 0) + 1;
+            entry.channelRetries[channel] = { attempts, nextAttemptAt: now().getTime() + Math.max(Math.min(300000, 2000 * 2 ** Math.min(attempts - 1, 8)), Math.min(86400000, Number(error.retryAfterMs) || 0)) };
+            entry.nextAttemptAt = Math.min(...entry.pendingChannels.map((name) => entry.channelRetries[name]?.nextAttemptAt || 0));
+            channelDelivery[channel] = { state: "failed", time: now().toISOString(), ...(Number.isInteger(error.httpStatus) ? { httpStatus: error.httpStatus } : {}), ...(error.code === "MATRIX_ENCRYPTED_ROOM" ? { reason: error.code } : {}) };
+            if (!saveProgress(entry)) break;
             console.error(`AgentBuzzer ${channel} delivery retry ${entry.attempts}: ${error.message}`);
           }
         }
@@ -150,7 +171,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     } finally { working = false; }
   }
 
-  async function accept(event) {
+  async function accept(event, selectedChannels) {
     if (!event || ![...AGENTS, "AgentBuzzer"].includes(event.agent) || !["completed", "failed", "needs_input"].includes(event.status) || typeof event.summary !== "string") {
       throw new Error("Invalid agent event");
     }
@@ -158,7 +179,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     const n = config.notifications;
     const decision = ingressDecision(n, event.agent, now());
     if (decision !== "queue") return { disposition: "dropped", reason: decision };
-    const channels = activeChannels(config.channels);
+    const channels = activeChannels(config.channels).filter((name) => !selectedChannels || selectedChannels.includes(name));
     if (!channels.length) return { disposition: "dropped", reason: "no_channel" };
     const entry = makeEntry(event, now().getTime(), channels);
     persistEntry(entry, env);
@@ -173,36 +194,52 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid settings");
     const old = readSettings(env);
     const updated = { ...old };
+    let restoreCredentials;
     if (input.deviceName !== undefined) {
       if (typeof input.deviceName !== "string" || !input.deviceName.trim() || input.deviceName.length > 100) throw new Error("Invalid device name");
       updated.deviceName = input.deviceName.trim();
     }
     if (input.notifications !== undefined) updated.notifications = validateNotifications(input.notifications);
     if (input.channels !== undefined) {
-      if (!input.channels || typeof input.channels !== "object") throw new Error("Invalid channels");
-      const current = old.channels || { feishu: old.feishu || {} };
+      if (!input.channels || typeof input.channels !== "object" || Array.isArray(input.channels)) throw new Error("Invalid channels");
+      const current = { ...(old.feishu ? { feishu: old.feishu } : {}), ...old.channels };
       updated.channels = { ...current };
+      const changes = {};
+      const keys = credentialKeys(env);
       for (const name of Object.keys(input.channels)) if (!CHANNELS.includes(name)) throw new Error("Unknown channel");
-      const { feishu = {}, webhook = {}, slack = {} } = input.channels;
-      for (const [name, value] of Object.entries({ feishu, webhook, slack })) {
-        if (!value || typeof value !== "object" || (value.enabled !== undefined && typeof value.enabled !== "boolean")) throw new Error(`Invalid ${name} settings`);
-        updated.channels[name] = { ...current[name], ...value };
-      }
-      const { appId, receiveId, receiveIdType, secret } = feishu;
-      if (receiveIdType !== undefined && !["open_id", "chat_id", "user_id", "email"].includes(receiveIdType)) throw new Error("Invalid recipient type");
-      for (const value of [appId, receiveId]) if (value !== undefined && (typeof value !== "string" || value.length > 200)) throw new Error("Invalid Feishu setting");
-      if (secret !== undefined && (typeof secret !== "string" || !secret || secret.length > 1000)) throw new Error("Invalid secret");
-      delete updated.channels.feishu.secret;
-      for (const name of ["webhook", "slack"]) {
-        const url = input.channels[name]?.url;
-        if (url !== undefined) updated.channels[name].url = validateEndpoint(url, name);
-        if (updated.channels[name].enabled && !(updated.channels[name].url || env[name === "webhook" ? "AGENTBUZZER_WEBHOOK_URL" : "AGENTBUZZER_SLACK_WEBHOOK_URL"])) {
-          throw new Error(`Configure ${name} URL before enabling it`);
+      for (const [name, value] of Object.entries(input.channels)) {
+        const definition = channelDefinition(name);
+        if (!value || typeof value !== "object" || Array.isArray(value) || (value.enabled !== undefined && typeof value.enabled !== "boolean")) throw new Error("Invalid channel settings");
+        const known = new Set(["enabled", ...definition.fields.map(({ name }) => name)]);
+        for (const key of Object.keys(value)) if (!known.has(key)) throw new Error("Unknown channel field");
+        const next = { ...current[name] };
+        if (value.enabled !== undefined) next.enabled = value.enabled;
+        for (const spec of definition.fields) {
+          const supplied = validateField(name, spec, value[spec.name]);
+          if (supplied === undefined) continue;
+          if (!spec.secret) next[spec.name] = supplied;
+          else {
+            changes[`${name}.${spec.name}`] = supplied;
+            delete next[spec.name];
+            if (spec.property) delete next[spec.property];
+            next.clearedSecrets = [...new Set([...(next.clearedSecrets || []).filter((key) => key !== spec.name), ...(supplied == null || supplied === "" ? [spec.name] : [])])];
+          }
         }
+        const enabled = definition.defaultEnabled ? next.enabled !== false : next.enabled === true;
+        for (const spec of definition.fields) {
+          const key = `${name}.${spec.name}`;
+          const stored = Object.hasOwn(changes, key) ? changes[key] : (keys.has(key) ? true : (!next.clearedSecrets?.includes(spec.name) && (next[spec.name] || next[spec.property] || (name === "feishu" && spec.name === "secret" && hasSecret()))));
+          const available = env[channelEnv(name, spec)] || (spec.secret ? stored : next[spec.name] ?? spec.default);
+          if (enabled && spec.required && (available === undefined || available === null || available === "" || available === false)) throw new Error(`Configure ${definition.label}: ${spec.label}`);
+        }
+        const emailPassword = env.AGENTBUZZER_EMAIL_PASSWORD || (Object.hasOwn(changes, "email.password") ? changes["email.password"] : keys.has("email.password") || (!next.clearedSecrets?.includes("password") && next.password));
+        if (enabled && name === "email" && (next.user || env.AGENTBUZZER_EMAIL_USER) && !emailPassword) throw new Error("Configure SMTP password before enabling authentication");
+        updated.channels[name] = next;
       }
-      if (secret) saveSecret(secret);
+      if (Object.keys(changes).length) restoreCredentials = saveCredentials(changes, env);
     }
-    saveSettings(updated, env);
+    try { saveSettings(updated, env); }
+    catch (error) { restoreCredentials?.(); throw error; }
     syncCycle();
     const config = loadConfig(env, { includeSecret: false });
     const discarded = purgeDisabled(config.notifications, config.channels, env);
@@ -226,12 +263,24 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     }
     return {
       settings: safeSettings(env),
+      channelCatalog: CHANNEL_CATALOG,
+      channelDelivery: { ...channelDelivery },
       cycle,
       queue: listEntries(env).map(({ id, event, createdAt, attempts, pendingChannels }) => ({ id, agent: event.agent, status: event.status, summary: event.summary, createdAt, attempts, pendingChannels })),
       adapters: statusCache.value,
       adaptersChecking: Boolean(statusCheck),
       adaptersError: statusError,
     };
+  }
+
+  async function testChannel(name) {
+    channelDefinition(name);
+    const config = loadConfig(env, { includeSecret: false });
+    if (!config.notifications.enabled) return { disposition: "dropped", reason: "disabled" };
+    const status = safeChannelSettings(env)[name];
+    if (!status.enabled) return { disposition: "dropped", reason: "channel_disabled" };
+    if (!status.configured) throw new Error("Channel configuration is incomplete");
+    return accept({ agent: "AgentBuzzer", status: "completed", summary: "这是一条 AgentBuzzer 测试通知。", key: randomUUID() }, [name]);
   }
 
   async function removeAdapter(agent) {
@@ -272,12 +321,14 @@ export function createService({ env = process.env, deliver = sendChannel, detect
           "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : name.endsWith(".js") ? "text/javascript; charset=utf-8" : name.endsWith(".svg") ? "image/svg+xml" : "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
           "X-Content-Type-Options": "nosniff",
+          "Cache-Control": "no-store",
         });
         return response.end(readFileSync(join(ROOT, "src", name)));
       }
       if (request.method === "GET" && url.pathname === "/api/state") return json(response, 200, await snapshot());
       if (request.method === "POST" && url.pathname === "/api/events") return json(response, 200, await accept(await body(request)));
       if (request.method === "PUT" && url.pathname === "/api/settings") return json(response, 200, updateSettings(await body(request)));
+      if (request.method === "POST" && /^\/api\/channels\/[A-Za-z0-9_-]+\/test$/.test(url.pathname)) return json(response, 200, await testChannel(url.pathname.split("/")[3]));
       if (request.method === "POST" && /^\/api\/install\/(codex|copilot|hermes)$/.test(url.pathname)) {
         const agent = url.pathname.split("/").at(-1);
         const output = await runCommand(process.execPath, [join(ROOT, "scripts", "install.mjs"), `--${agent}`, "--force"]);
@@ -291,12 +342,12 @@ export function createService({ env = process.env, deliver = sendChannel, detect
       }
       return json(response, 404, { error: "Not found" });
     } catch (error) {
-      return json(response, 400, { error: error.message });
+      return json(response, 400, { error: error instanceof SyntaxError ? "Invalid JSON input" : error.message });
     }
   });
 
   const service = {
-    accept, pump, snapshot, updateSettings, removeAdapter,
+    accept, pump, snapshot, updateSettings, removeAdapter, testChannel,
     async start(port = PORT) {
       await new Promise((resolvePromise, reject) => {
         server.once("error", reject);
