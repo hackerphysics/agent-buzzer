@@ -12,6 +12,15 @@ export function windowsHookCommand(nodeBinary, entry, action) {
   return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
 }
 
+export function posixHookCommand(nodeBinary, entry, action) {
+  const argument = (value) => {
+    const octal = Array.from(Buffer.from(value, "utf8"), (byte) => `\\${byte.toString(8).padStart(3, "0")}`).join("");
+    return `"$(printf "${octal}")"`;
+  };
+  // Only ASCII escapes cross the outer shell; sh owns decoding and exec preserves stdin.
+  return `/bin/sh -c 'exec ${[nodeBinary, entry, action].map(argument).join(" ")}'`;
+}
+
 function bundle(source, destination) {
   mkdirSync(destination, { recursive: true });
   cpSync(join(ROOT, "plugins", source), destination, { recursive: true, force: true });
@@ -39,7 +48,7 @@ export function packagePlugins() {
     const action = eventName === "Stop" ? "codex-stop" : "codex-permission";
     for (const group of groups) {
       for (const hook of group.hooks) {
-        hook.command = `"${nodeBinary}" "${join(ROOT, "bin", "agent-buzzer.mjs")}" ${action}`;
+        hook.command = posixHookCommand(nodeBinary, join(ROOT, "bin", "agent-buzzer.mjs"), action);
         hook.commandWindows = windowsHookCommand(nodeBinary, join(ROOT, "bin", "agent-buzzer.mjs"), action);
       }
     }

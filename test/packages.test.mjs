@@ -45,10 +45,6 @@ test("Codex hooks execute in PowerShell and cmd.exe with notifications disabled"
   writeFileSync(config, JSON.stringify({ notifications: { enabled: false } }));
   const env = { ...process.env, AGENTBUZZER_CONFIG: config };
   const hooks = JSON.parse(readFileSync(join(packagePlugins().codex, "hooks", "hooks.json"), "utf8"));
-  const legacy = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", hooks.hooks.Stop[0].hooks[0].command], {
-    env, input: "{}", encoding: "utf8", windowsHide: true, timeout: 12000,
-  });
-  assert.equal(legacy.status, 1);
   for (const groups of Object.values(hooks.hooks)) {
     const command = groups[0].hooks[0].commandWindows;
     for (const [shell, args, raw] of [

@@ -10,9 +10,7 @@ On first launch the desktop app copies its service and runtime to `~/.agent-buzz
 
 After installing or updating the Codex adapter, the app opens a short Hook-authorization guide. Restart Codex, open `/hooks` in a new conversation, review and trust AgentBuzzer's `Stop` and `PermissionRequest` hooks, then finish a test turn. You can reopen the guide from the Codex adapter row. An installed plugin is not proof that Codex has trusted its hooks; the app never grants that trust on your behalf.
 
-On Windows, generated Codex hooks use an explicit PowerShell launcher so they work both in PowerShell sessions and under `cmd.exe`. The UTF-16 encoded command protects executable paths containing spaces or apostrophes and preserves hook stdin. Changing the launcher requires reviewing the two hooks again.
-
-Codex hook diagnostics are written to `~/.agent-buzzer/codex-hook.log` (beside the settings file when `AGENTBUZZER_CONFIG` is set). Logs contain timestamps, hook commands, completion states, and safe error categories, never notification text or credentials. The log rotates after 128 KiB and retains one previous file. A failure with no `started` record indicates that the shell or runtime failed before AgentBuzzer could start.
+Generated Codex hooks select an explicit native launcher: PowerShell on Windows and `/bin/sh` on macOS/Linux. Windows uses a UTF-16 encoded command; Unix passes UTF-8 path bytes as octal escapes to the inner shell. Paths are never evaluated as outer-shell code, and the hook's stdin and exit status are preserved. Changing a generated hook requires reviewing the two hooks again.
 
 The **Adapters** page can also remove each AgentBuzzer plugin individually after confirmation. This leaves the AgentBuzzer service, other adapters, channel settings, and marketplace registrations intact, but discards that Agent's pending notifications. Restart an already-open Agent session to unload hooks it may have cached.
 
@@ -37,6 +35,24 @@ npm run install:local -- --force
 ```
 
 The installer only manages the `agent-buzzer` plugins. Codex may ask you to trust the `Stop` and `PermissionRequest` hooks; restart Codex Desktop after installing. Copilot CLI uses `agentStop` and `notification` hooks. Copilot Desktop's plugin execution has not been verified. Hermes observes completion, failed/interrupted sessions, and approval requests.
+
+## Shell compatibility
+
+The native CI runners execute launch-contract tests with these outer shells:
+
+| Platform | Tested shells |
+| --- | --- |
+| Windows x64 | `cmd.exe`, Windows PowerShell 5.1, PowerShell 7, Git Bash |
+| macOS Intel / Apple Silicon | `sh`, `bash`, `zsh`, `fish` |
+| Linux x64 | `sh`, `bash`, `dash`, `zsh`, `fish` |
+
+The tests exercise both Codex hooks, paths containing spaces, apostrophes, Unicode and shell metacharacters, UTF-8 JSON on stdin, stdout, and nonzero exit status. They also verify Copilot's executable/argument arrays and Hermes's Python subprocess contract without calling an external notification service. These are launch-contract tests, not an end-to-end certification of every Agent version.
+
+`npm run test:shells` runs the matrix available on the current machine. With `AGENTBUZZER_REQUIRE_SHELLS=1`, missing shells or Python fail the tests instead of being skipped; CI enables this setting and installs the additional Unix shells. WSL, SSH/remote sessions, and other shells are not part of this matrix. Install adapters separately in each operating-system environment; do not copy a Windows plugin's generated paths into Linux.
+
+## Hook diagnostics
+
+Codex hook diagnostics are written to `~/.agent-buzzer/codex-hook.log` (beside the settings file when `AGENTBUZZER_CONFIG` is set). Logs contain timestamps, hook commands, completion states, and safe error categories, never notification text or credentials. The log rotates after 128 KiB and retains one previous file. A failure with no `started` record indicates that the shell or runtime failed before AgentBuzzer could start.
 
 ## Settings
 

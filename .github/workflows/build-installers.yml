@@ -39,8 +39,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Install Linux test shells
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fish zsh
+      - name: Install macOS test shells
+        if: runner.os == 'macOS'
+        run: brew install fish
       - run: npm ci
       - run: npm test
+        env:
+          AGENTBUZZER_REQUIRE_SHELLS: "1"
       - run: npm run stage
       - run: npx electron-builder ${{ matrix.target }} --publish never
         env:
