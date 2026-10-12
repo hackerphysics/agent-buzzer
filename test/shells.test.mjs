@@ -79,6 +79,17 @@ for (const shell of shells) {
       assert.deepEqual(JSON.parse(result.stdout), { input, args: ["codex-stop"] });
       assert.equal(result.stderr, "");
     }
+    for (const [node, entry] of [
+      [join(files.dir, "missing-runtime"), files.entry],
+      [files.node, join(files.dir, "missing-entry.mjs")],
+    ]) {
+      const result = spawnSync(shell.program, shell.args(build(node, entry, "codex-stop")), {
+        input, encoding: "utf8", windowsHide: true, windowsVerbatimArguments: shell.raw, timeout: 15000,
+      });
+      assert.ifError(result.error);
+      assert.notEqual(result.status, 0, "A launch failure must not report success");
+      assert.ok(result.stderr.trim(), "A launch failure must include diagnostics on stderr");
+    }
     for (const action of ["codex-stop", "codex-permission"]) {
       const command = build(files.node, join(ROOT, "bin", "agent-buzzer.mjs"), action);
       const result = spawnSync(shell.program, shell.args(command), {

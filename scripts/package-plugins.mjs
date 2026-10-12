@@ -6,7 +6,7 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export function windowsHookCommand(nodeBinary, entry, action) {
   const quote = (value) => `'${value.replaceAll("'", "''")}'`;
-  const script = `& ${quote(nodeBinary)} ${quote(entry)} ${quote(action)}; exit $LASTEXITCODE`;
+  const script = `$ErrorActionPreference = 'Stop'; & ${quote(nodeBinary)} ${quote(entry)} ${quote(action)}; exit $LASTEXITCODE`;
   // Codex can use either the session's PowerShell or the default cmd.exe.
   const encoded = Buffer.from(script, "utf16le").toString("base64");
   return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`;

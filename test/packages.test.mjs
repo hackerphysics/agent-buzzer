@@ -38,7 +38,7 @@ test("native plugin bundles contain self-sufficient service and local hook paths
 test("Windows hook quotes paths independently of the outer shell", () => {
   const command = windowsHookCommand("C:\\User's tools\\node.exe", "C:\\app space\\entry.mjs", "codex-stop");
   const script = Buffer.from(command.split(" ").at(-1), "base64").toString("utf16le");
-  assert.equal(script, "& 'C:\\User''s tools\\node.exe' 'C:\\app space\\entry.mjs' 'codex-stop'; exit $LASTEXITCODE");
+  assert.equal(script, "$ErrorActionPreference = 'Stop'; & 'C:\\User''s tools\\node.exe' 'C:\\app space\\entry.mjs' 'codex-stop'; exit $LASTEXITCODE");
 });
 
 test("Codex hooks execute in PowerShell and cmd.exe with notifications disabled", { skip: process.platform !== "win32" }, (t) => {

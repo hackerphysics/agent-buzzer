@@ -46,7 +46,7 @@ The native CI runners execute launch-contract tests with these outer shells:
 | macOS Intel / Apple Silicon | `sh`, `bash`, `zsh`, `fish` |
 | Linux x64 | `sh`, `bash`, `dash`, `zsh`, `fish` |
 
-The tests exercise both Codex hooks, paths containing spaces, apostrophes, Unicode and shell metacharacters, UTF-8 JSON on stdin, stdout, and nonzero exit status. They also verify Copilot's executable/argument arrays and Hermes's Python subprocess contract without calling an external notification service. These are launch-contract tests, not an end-to-end certification of every Agent version.
+The tests exercise both Codex hooks, paths containing spaces, apostrophes, Unicode and shell metacharacters, UTF-8 JSON on stdin, stdout, nonzero exit status, and missing runtime/script failures. They also verify Copilot's executable/argument arrays and Hermes's Python subprocess contract without calling an external notification service. These are launch-contract tests, not an end-to-end certification of every Agent version.
 
 `npm run test:shells` runs the matrix available on the current machine. With `AGENTBUZZER_REQUIRE_SHELLS=1`, missing shells or Python fail the tests instead of being skipped; CI enables this setting and installs the additional Unix shells. WSL, SSH/remote sessions, and other shells are not part of this matrix. Install adapters separately in each operating-system environment; do not copy a Windows plugin's generated paths into Linux.
 
