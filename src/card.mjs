@@ -1,5 +1,6 @@
 import { eventText, eventTime } from "./webhook.mjs";
 import { modelMetadata } from "./model-metadata.mjs";
+import { eventSummary, normalizeLanguage, translate } from "./i18n.mjs";
 
 const STATUS = {
   completed: { title: "任务已完成", color: "green" },
@@ -19,12 +20,13 @@ function escapeMarkdown(value) {
 }
 
 function footer(event, deviceName, context) {
+  const language = normalizeLanguage(context.language);
   const device = eventText(deviceName, 100).replace(/[\r\n]/g, " ");
   const lines = [device ? `AgentBuzzer · ${device}` : "AgentBuzzer"];
   const timestamp = eventTime(event.occurredAt, eventTime(context.createdAt, null));
   if (timestamp) {
-    const time = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "shortOffset" }).format(new Date(timestamp));
-    lines.push(`${event.status === "completed" ? "完成时间" : event.status === "failed" ? "结束时间" : "发生时间"}：${time}`);
+    const time = new Intl.DateTimeFormat(language, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "shortOffset" }).format(new Date(timestamp));
+    lines.push(`${translate(event.status === "completed" ? "完成时间" : event.status === "failed" ? "结束时间" : "发生时间", language)}${language === "en" ? ": " : "："}${time}`);
   }
   const { model, contextTokens, contextWindow, contextPercent } = modelMetadata(event);
   const metadata = [];
@@ -35,16 +37,17 @@ function footer(event, deviceName, context) {
   if (contextTokens !== undefined) {
     const window = contextWindow !== undefined ? ` / ${number(contextWindow)}` : "";
     metadata.push(`Context: ${number(contextTokens)}${window} tokens${percent}`);
-  } else if (contextWindow !== undefined) metadata.push(`Context 窗口: ${number(contextWindow)} tokens${percent}`);
+  } else if (contextWindow !== undefined) metadata.push(`${translate("Context 窗口", language)}: ${number(contextWindow)} tokens${percent}`);
   else if (contextPercent !== undefined) metadata.push(`Context: ${Math.round(contextPercent * 10) / 10}%`);
   if (metadata.length) lines.push(metadata.join(" · "));
   return lines.join("\n");
 }
 
 export function buildCard(event, deviceName, context = {}) {
+  const language = normalizeLanguage(context.language);
   const state = STATUS[event.status];
   if (!state) throw new Error("Unsupported notification status");
-  const title = `${event.agent} · ${state.title}`;
+  const title = `${event.agent} · ${translate(state.title, language)}`;
   const sessionName = eventText(event.sessionName, 256);
   const card = {
     schema: "2.0",
@@ -63,7 +66,7 @@ export function buildCard(event, deviceName, context = {}) {
       elements: [
         {
           tag: "markdown",
-          content: escapeMarkdown(shortSummary(event.summary, state.title)),
+          content: escapeMarkdown(shortSummary(eventSummary(event, language, state.title), translate(state.title, language))),
         },
       ],
     },
@@ -71,7 +74,7 @@ export function buildCard(event, deviceName, context = {}) {
   if (event.url && /^https:\/\//i.test(event.url)) {
     card.body.elements.push({
       tag: "button",
-      text: { tag: "plain_text", content: "查看任务" },
+      text: { tag: "plain_text", content: translate("查看任务", language) },
       type: "default",
       behaviors: [{ type: "open_url", default_url: event.url }],
     });

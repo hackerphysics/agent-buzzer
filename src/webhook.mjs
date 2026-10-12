@@ -1,3 +1,5 @@
+import { eventSummary, summaryKey } from "./i18n.mjs";
+
 export const WEBHOOK_FIELDS = [
   { name: "deviceName", label: "设备名称" },
   { name: "agentName", label: "Agent 名称" },
@@ -52,7 +54,7 @@ export function webhookMessage(event, deviceName, context = {}) {
     agentName: event.agent,
     appName: "AgentBuzzer",
     sessionName: eventText(event.sessionName, 256) || sessionId || "",
-    resultDetails: eventText(event.resultDetails, 8000) || eventText(event.summary, 8000),
+    resultDetails: summaryKey(event.summaryKey) ? eventSummary(event, context.language) : eventText(event.resultDetails, 8000) || eventText(event.summary, 8000),
     completedAt: event.status === "needs_input" ? null : occurredAt,
     eventId: context.deliveryId || "",
     sessionId,
@@ -77,7 +79,7 @@ export function mapWebhookMessage(message, value) {
 
 export function webhookPayload(config, event, deviceName, context) {
   if (config.payloadFormat === "legacy") {
-    const legacy = { agent: event.agent, status: event.status, summary: event.summary };
+    const legacy = { agent: event.agent, status: event.status, summary: summaryKey(event.summaryKey) ? eventSummary(event, context?.language) : event.summary };
     for (const name of ["key", "url"]) if (event[name] !== undefined) legacy[name] = event[name];
     return { event: legacy, deviceName };
   }

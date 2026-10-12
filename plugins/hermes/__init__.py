@@ -11,7 +11,7 @@ ENTRY = Path(__file__).resolve().parent / "bin" / "agent-buzzer.mjs"
 NODE_BINARY = "node"
 
 
-def _send(status, summary, session_id=None, turn_id=None, session_name=None, metadata=None):
+def _send(status, summary, session_id=None, turn_id=None, session_name=None, metadata=None, summary_key=None):
     payload = {
         "status": status,
         "summary": summary or "",
@@ -20,6 +20,8 @@ def _send(status, summary, session_id=None, turn_id=None, session_name=None, met
         "session_name": session_name,
         "occurred_at": datetime.now(timezone.utc).isoformat(),
     }
+    if summary_key:
+        payload["summaryKey"] = summary_key
     for key in ("model", "model_name", "context_tokens", "context_window", "context_percent", "contextTokens", "contextWindow", "contextPercent"):
         value = (metadata or {}).get(key)
         if isinstance(value, float) and not isfinite(value):
@@ -47,11 +49,11 @@ def _finished(session_id, assistant_response, **kwargs):
 def _ended(session_id, completed, interrupted, **kwargs):
     if not completed:
         summary = "本轮已中断" if interrupted else "本轮未完成"
-        _send("failed", summary, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs)
+        _send("failed", summary, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs, summary)
 
 
 def _approval(session_key, description, **kwargs):
-    _send("needs_input", description or "有操作需要你批准", session_key, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs)
+    _send("needs_input", description or "有操作需要你批准", session_key, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs, None if description else "有操作需要你批准")
 
 
 def register(ctx):

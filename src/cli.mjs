@@ -6,6 +6,7 @@ import { getTenantToken } from "./feishu.mjs";
 import { saveCredentials } from "./secret-store.mjs";
 import { ensureService, submitEvent } from "./client.mjs";
 import { BASE_URL, createService } from "./service.mjs";
+import { translate } from "./i18n.mjs";
 
 const ADAPTERS = {
   "codex-stop": fromCodexStop,
@@ -119,12 +120,12 @@ export async function main(args) {
   }
   if (command === "test-card") {
     const config = loadConfig();
-    const card = buildCard({ agent: "AgentBuzzer", status: "completed", summary: "这是一条测试通知。" }, config.deviceName);
+    const card = buildCard({ agent: "AgentBuzzer", status: "completed", summary: translate("这是一条测试通知。", config.language) }, config.deviceName, { language: config.language });
     if (rest.includes("--dry-run")) {
       console.log(JSON.stringify(card, null, 2));
       return;
     }
-    const result = await submitEvent({ agent: "AgentBuzzer", status: "completed", summary: "这是一条测试通知。" });
+    const result = await submitEvent({ agent: "AgentBuzzer", status: "completed", summary: "这是一条测试通知。", summaryKey: "这是一条测试通知。" });
     console.log(`Test event ${result.disposition}.`);
     return;
   }

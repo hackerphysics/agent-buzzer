@@ -17,7 +17,11 @@ button:disabled { cursor: default; opacity: .5; }
 .nav-item:hover { background: #e8eeea; }
 .nav-item.active { color: #075d49; background: #dcefe6; }
 .content { max-width: 780px; min-width: 0; width: 100%; }
-.heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+.heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 25px; }
+.heading > div:first-child { flex: 1 1 210px; min-width: 0; }
+.language-settings { display: block; margin-top: 24px; color: #52605b; font-size: 12px; }
+.language-settings select { max-width: 180px; }
+@media (max-width: 780px) { .language-settings { display: flex; align-items: center; gap: 12px; margin: 0 0 20px; } .language-settings select { width: 150px; margin: 0; } }
 .heading-actions { display: flex; align-items: center; gap: 14px; }
 h1 { font-size: 24px; margin: 0 0 7px; font-weight: 650; }
 .heading p { color: #63716c; margin: 0; }
@@ -118,5 +122,5 @@ dialog p { line-height: 1.6; color: #56645d; margin: 12px 0 22px; }
 .danger-button:hover { background: #892e2e; }
 .remove-button:focus-visible, .danger-button:focus-visible { outline: 2px solid #a53b3b; outline-offset: 3px; }
 #feedback { color: #49675c; min-height: 18px; margin: -12px 0 14px; font-size: 12px; overflow-wrap: anywhere; }
-@media (max-width: 780px) { .shell { display: block; padding: 18px 18px 60px; } .sidebar { position: static; } .brand { margin-bottom: 14px; } .navigation { flex-direction: row; gap: 0; overflow-x: auto; border-bottom: 1px solid #dce3e0; margin: 0 -18px 24px; padding: 0 10px; } .nav-item { flex: 0 0 auto; border-radius: 0; border-bottom: 2px solid transparent; padding: 14px 12px 12px; } .nav-item.active { background: none; border-color: #08745b; } .content { max-width: none; } }
+@media (max-width: 780px) { .shell { display: block; padding: 18px 18px 60px; } .sidebar { position: static; } .brand { margin-bottom: 14px; } .navigation { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(46px, auto); gap: 0; border-bottom: 1px solid #dce3e0; margin: 0 -18px 24px; padding: 0 10px; } .nav-item { min-width: 0; border-radius: 0; border-bottom: 2px solid transparent; padding: 11px 12px; } .nav-item.active { background: none; border-color: #08745b; } .content { max-width: none; } }
 @media (max-width: 420px) { .heading-actions { gap: 8px; } .field-pair { gap: 8px; } .queue-top { flex-direction: column; gap: 3px; } }

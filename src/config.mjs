@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { credentialKeys, hasSecret, loadCredential, loadSecret } from "./secret-store.mjs";
 import { CHANNEL_CATALOG, CHANNELS, channelDefinition, channelEnv } from "./channel-schema.mjs";
+import { normalizeLanguage } from "./i18n.mjs";
 
 export const AGENTS = ["Codex", "GitHub Copilot", "Hermes"];
 export { CHANNELS };
@@ -54,6 +55,7 @@ export function loadConfig(env = process.env, { includeSecret = true } = {}) {
   if (!["open_id", "chat_id", "user_id", "email"].includes(channels.feishu.receiveIdType)) throw new Error("Invalid Feishu recipient type");
   return {
     deviceName: env.AGENTBUZZER_DEVICE_NAME || settings.deviceName || env.COMPUTERNAME || hostname(),
+    language: normalizeLanguage(settings.language),
     notifications: notificationSettings(settings.notifications),
     feishu: channels.feishu,
     channels,

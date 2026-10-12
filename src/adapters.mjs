@@ -3,6 +3,7 @@ import { shortSummary } from "./card.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { eventText, eventTime } from "./webhook.mjs";
 import { modelMetadata } from "./model-metadata.mjs";
+import { summaryKey } from "./i18n.mjs";
 
 export function eventMetadata(input, details, metadata = {}) {
   const supplied = modelMetadata(input);
@@ -22,11 +23,15 @@ function text(value, fallback) {
   return shortSummary(value, fallback);
 }
 
+function summaryFields(value, fallback) {
+  return { summary: text(value, fallback), ...(!String(value || "").trim() ? { summaryKey: fallback } : {}) };
+}
+
 export function fromCodexStop(input) {
   return {
     agent: "Codex",
     status: "completed",
-    summary: text(input.last_assistant_message, "本轮任务已结束"),
+    ...summaryFields(input.last_assistant_message, "本轮任务已结束"),
     key: input.turn_id || input.session_id,
     ...eventMetadata(input, input.last_assistant_message, codexMetadata(input)),
   };
@@ -36,7 +41,7 @@ export function fromCodexPermission(input) {
   return {
     agent: "Codex",
     status: "needs_input",
-    summary: text(input.tool_input?.description, "有操作需要你批准"),
+    ...summaryFields(input.tool_input?.description, "有操作需要你批准"),
     key: input.turn_id || input.session_id,
     ...eventMetadata(input, input.tool_input?.description, codexMetadata(input)),
   };
@@ -141,7 +146,7 @@ export function fromCopilotStop(input, reply = lastCopilotReply(input.transcript
   return {
     agent: "GitHub Copilot",
     status: "completed",
-    summary: text(reply, "本轮任务已结束"),
+    ...summaryFields(reply, "本轮任务已结束"),
     key: input.sessionId || input.session_id,
     ...eventMetadata(input, reply, copilotMetadata(input)),
   };
@@ -152,7 +157,7 @@ export function fromCopilotNotification(input) {
   return {
     agent: "GitHub Copilot",
     status: "needs_input",
-    summary: text(input.message, "Copilot 正在等待你处理"),
+    ...summaryFields(input.message, "Copilot 正在等待你处理"),
     key: input.sessionId || input.session_id,
     ...eventMetadata(input, input.message, copilotMetadata(input)),
   };
@@ -165,7 +170,8 @@ export function fromHermes(input) {
   return {
     agent: "Hermes",
     status: input.status,
-    summary: text(input.summary, input.status === "needs_input" ? "Hermes 正在等待你处理" : "本轮任务已结束"),
+    ...summaryFields(input.summary, input.status === "needs_input" ? "Hermes 正在等待你处理" : "本轮任务已结束"),
+    ...(summaryKey(input.summaryKey) ? { summaryKey: input.summaryKey } : {}),
     key: input.turn_id || input.session_id,
     ...eventMetadata(input, input.resultDetails ?? input.summary),
   };

@@ -58,6 +58,12 @@ Codex hook diagnostics are written to `~/.agent-buzzer/codex-hook.log` (beside t
 
 ## Settings
 
+The sidebar **Language / 语言** selector supports Simplified Chinese (`zh-CN`) and English (`en`). Switching applies immediately and is saved in the local settings file, without changing notification policies, channel credentials or unsaved form drafts. Existing installations default to Chinese. Pages, provider labels, validation feedback, confirmation dialogs, Hook guidance, and date/time displays follow the selected language. Narrow layouts use a two-column page navigation so English labels remain fully visible.
+
+App-generated notification titles, status labels, footer labels, test messages and adapter fallback summaries also use the selected language. Queue replay uses the current language while retaining the original event time and metadata. Actual Agent replies, session names, device names, model identifiers and Webhook JSON field names are never translated. Older queued events/adapters that did not mark their generated fallback text retain their original summary. Update adapters to enable localized fallback summaries. Technical CLI diagnostic output and operating-system-native controls may retain their own language.
+
+You can also update the preference with `PUT /api/settings` and `{ "language": "en" }` or `{ "language": "zh-CN" }`.
+
 Set the device name and choose a channel on the **Channels** page. Each channel has independent configuration, enable/disable controls, a scoped test button, and its last delivery status. Desktop uses a grouped channel list; mobile uses a selector. Unsaved drafts stay in memory while switching channels, not in browser storage.
 
 | Channel | Required configuration |

@@ -3,10 +3,11 @@ import { spawn } from "node:child_process";
 import { buildCard, shortSummary } from "./card.mjs";
 import { channelDefinition, validateEndpoint, validateField } from "./channel-schema.mjs";
 import { webhookPayload } from "./webhook.mjs";
+import { eventSummary, translate } from "./i18n.mjs";
 
-export function notificationText(event, deviceName) {
+export function notificationText(event, deviceName, language = "zh-CN") {
   const status = { completed: "已完成", needs_input: "等待处理", failed: "未完成" }[event.status] || event.status;
-  return `AgentBuzzer · ${event.agent} · ${deviceName} · ${status}\n${shortSummary(event.summary, "任务状态已更新")}`;
+  return `AgentBuzzer · ${event.agent} · ${deviceName} · ${translate(status, language)}\n${shortSummary(eventSummary(event, language), translate("任务状态已更新", language))}`;
 }
 
 function deliveryError(name, response) {
@@ -56,7 +57,7 @@ function transactionId(context) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-export async function sendEmail(config, event, deviceName, createTransport) {
+export async function sendEmail(config, event, deviceName, createTransport, language = "zh-CN") {
   const create = createTransport || (await import("nodemailer")).default.createTransport;
   const transport = create({
     host: config.host, port: config.port, secure: config.tls === "tls", requireTLS: config.tls !== "tls",
@@ -66,7 +67,7 @@ export async function sendEmail(config, event, deviceName, createTransport) {
     disableFileAccess: true, disableUrlAccess: true, logger: false, debug: false,
   });
   try {
-    const info = await transport.sendMail({ from: config.from, to: config.to, subject: `[AgentBuzzer] ${event.agent} · ${deviceName}`, text: notificationText(event, deviceName), disableFileAccess: true, disableUrlAccess: true });
+    const info = await transport.sendMail({ from: config.from, to: config.to, subject: `[AgentBuzzer] ${event.agent} · ${deviceName}`, text: notificationText(event, deviceName, language), disableFileAccess: true, disableUrlAccess: true });
     if (!info.accepted?.length || info.rejected?.length) throw new Error("Rejected recipient");
   } catch (error) { throw new Error(error.code === "EAUTH" ? "SMTP authentication failed" : error.code === "ETIMEDOUT" ? "SMTP timed out" : error.code === "ESOCKET" ? "SMTP connection or TLS failed" : "SMTP delivery failed"); }
   finally { transport.close?.(); }
@@ -110,9 +111,9 @@ export async function sendProvider(name, config, event, deviceName, fetchImpl = 
     if (spec.required && (value === undefined || value === null || value === "")) throw new Error(`${channelDefinition(name).label} configuration is incomplete`);
     config[property] = value;
   }
-  const text = notificationText(event, deviceName);
+  const text = notificationText(event, deviceName, context.language);
   const title = `${event.agent} · ${deviceName}`;
-  if (name === "email") return sendEmail(config, event, deviceName, context.createTransport);
+  if (name === "email") return sendEmail(config, event, deviceName, context.createTransport, context.language);
   if (name === "hermes") return (context.hermesSend || sendViaHermes)(config, text);
   let url, payload, headers = {}, form = false;
   if (["webhook", "slack", "discord", "teams", "googlechat", "mattermost", "feishuBot", "dingtalk", "wecom"].includes(name)) url = validateEndpoint(config.url, name);

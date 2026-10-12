@@ -13,13 +13,14 @@ import { credentialKeys, hasSecret, saveCredentials } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
 import { runCommand as executeCommand } from "./commands.mjs";
 import { webhookPayload } from "./webhook.mjs";
+import { LANGUAGES, normalizeLanguage, translate } from "./i18n.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
 const BUILD_ID = buildId(ROOT);
 export const PORT = Number(process.env.AGENTBUZZER_PORT || 38147);
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
-const UI_FILES = new Map([["/", "ui.html"], ["/ui.css", "ui.css"], ["/ui.js", "ui.js"], ["/icon.svg", "icon.svg"]]);
+const UI_FILES = new Map([["/", "ui.html"], ["/ui.css", "ui.css"], ["/ui.js", "ui.js"], ["/i18n.mjs", "i18n.mjs"], ["/icon.svg", "icon.svg"]]);
 const ADAPTER_AGENTS = { codex: "Codex", copilot: "GitHub Copilot", hermes: "Hermes" };
 
 function json(response, status, data) {
@@ -54,6 +55,7 @@ function safeSettings(env) {
   const config = loadConfig(env, { includeSecret: false });
   return {
     deviceName: config.deviceName,
+    language: config.language,
     notifications: config.notifications,
     channels: safeChannelSettings(env),
   };
@@ -152,7 +154,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
           try {
             const channelConfig = loadChannelConfig(channel, env);
             channelDelivery[channel] = { state: "sending", time: now().toISOString() };
-            await deliver(channel, channelConfig, entry.event, entry.deviceName || current.deviceName, undefined, { deliveryId: entry.id, createdAt: entry.createdAt });
+            await deliver(channel, channelConfig, entry.event, entry.deviceName || current.deviceName, undefined, { deliveryId: entry.id, createdAt: entry.createdAt, language: current.language });
             channelDelivery[channel] = { state: "sent", time: now().toISOString() };
             entry.pendingChannels = entry.pendingChannels.filter((name) => name !== channel);
             delete entry.channelRetries[channel];
@@ -195,6 +197,10 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid settings");
     const old = readSettings(env);
     const updated = { ...old };
+    if (input.language !== undefined) {
+      if (!LANGUAGES.includes(input.language)) throw new Error("Invalid language");
+      updated.language = input.language;
+    }
     let restoreCredentials;
     if (input.deviceName !== undefined) {
       if (typeof input.deviceName !== "string" || !input.deviceName.trim() || input.deviceName.length > 100) throw new Error("Invalid device name");
@@ -267,7 +273,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
       channelCatalog: CHANNEL_CATALOG,
       channelDelivery: { ...channelDelivery },
       cycle,
-      queue: listEntries(env).map(({ id, event, createdAt, attempts, pendingChannels }) => ({ id, agent: event.agent, status: event.status, summary: event.summary, createdAt, attempts, pendingChannels })),
+      queue: listEntries(env).map(({ id, event, createdAt, attempts, pendingChannels }) => ({ id, agent: event.agent, status: event.status, summary: event.summary, summaryKey: event.summaryKey, createdAt, attempts, pendingChannels })),
       adapters: statusCache.value,
       adaptersChecking: Boolean(statusCheck),
       adaptersError: statusError,
@@ -281,7 +287,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     const status = safeChannelSettings(env)[name];
     if (!status.enabled) return { disposition: "dropped", reason: "channel_disabled" };
     if (!status.configured) throw new Error("Channel configuration is incomplete");
-    return accept({ agent: "AgentBuzzer", status: "completed", summary: "这是一条 AgentBuzzer 测试通知。", key: randomUUID() }, [name]);
+    return accept({ agent: "AgentBuzzer", status: "completed", summary: "这是一条 AgentBuzzer 测试通知。", summaryKey: "这是一条 AgentBuzzer 测试通知。", key: randomUUID() }, [name]);
   }
 
   async function removeAdapter(agent) {
@@ -318,13 +324,19 @@ export function createService({ env = process.env, deliver = sendChannel, detect
       }
       if (request.method === "GET" && UI_FILES.has(url.pathname)) {
         const name = UI_FILES.get(url.pathname);
+        let file = readFileSync(join(ROOT, "src", name));
+        if (name === "ui.html") {
+          let language = "zh-CN";
+          try { language = normalizeLanguage(readSettings(env).language); } catch { /* Keep the retry UI available when settings are unreadable. */ }
+          file = file.toString().replace("{{language}}", language);
+        }
         response.writeHead(200, {
-          "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : name.endsWith(".js") ? "text/javascript; charset=utf-8" : name.endsWith(".svg") ? "image/svg+xml" : "text/html; charset=utf-8",
+          "Content-Type": name.endsWith(".css") ? "text/css; charset=utf-8" : /\.m?js$/.test(name) ? "text/javascript; charset=utf-8" : name.endsWith(".svg") ? "image/svg+xml" : "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
           "X-Content-Type-Options": "nosniff",
           "Cache-Control": "no-store",
         });
-        return response.end(readFileSync(join(ROOT, "src", name)));
+        return response.end(file);
       }
       if (request.method === "GET" && url.pathname === "/api/state") return json(response, 200, await snapshot());
       if (request.method === "POST" && url.pathname === "/api/events") return json(response, 200, await accept(await body(request)));
@@ -333,7 +345,8 @@ export function createService({ env = process.env, deliver = sendChannel, detect
         const input = await body(request);
         const definition = channelDefinition("webhook");
         const config = Object.fromEntries(definition.fields.filter(({ secret }) => !secret).map((spec) => [spec.name, validateField("webhook", spec, input[spec.name] ?? spec.default)]));
-        return json(response, 200, webhookPayload(config, { agent: "Codex", status: "completed", summary: "任务已完成", sessionName: "示例会话", sessionId: "session-example", turnId: "turn-example", occurredAt: "2026-01-01T08:00:00.000Z" }, loadConfig(env, { includeSecret: false }).deviceName, { deliveryId: "event-example" }));
+        const current = loadConfig(env, { includeSecret: false });
+        return json(response, 200, webhookPayload(config, { agent: "Codex", status: "completed", summary: translate("任务已完成", current.language), sessionName: translate("示例会话", current.language), sessionId: "session-example", turnId: "turn-example", occurredAt: "2026-01-01T08:00:00.000Z" }, current.deviceName, { deliveryId: "event-example", language: current.language }));
       }
       if (request.method === "POST" && /^\/api\/channels\/[A-Za-z0-9_-]+\/test$/.test(url.pathname)) return json(response, 200, await testChannel(url.pathname.split("/")[3]));
       if (request.method === "POST" && /^\/api\/install\/(codex|copilot|hermes)$/.test(url.pathname)) {

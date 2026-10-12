@@ -8,6 +8,8 @@ const { pathToFileURL } = require("node:url");
 const url = "http://127.0.0.1:38147";
 const single = app.requestSingleInstanceLock();
 let window;
+let language = "zh-CN";
+let localizeError = (message) => message;
 if (!single) app.quit();
 else app.on("second-instance", () => { window?.show(); window?.focus(); });
 
@@ -57,6 +59,11 @@ async function launchService() {
 
 if (single) app.whenReady().then(async () => {
   try {
+    const source = join(process.resourcesPath, "agent-buzzer", "src");
+    const { translateError } = await import(pathToFileURL(join(source, "i18n.mjs")));
+    localizeError = (message) => translateError(message, language);
+    const { loadConfig } = await import(pathToFileURL(join(source, "config.mjs")));
+    language = loadConfig(process.env, { includeSecret: false }).language;
     await launchService();
     if (process.platform !== "darwin") Menu.setApplicationMenu(null);
     window = new BrowserWindow({
@@ -71,7 +78,7 @@ if (single) app.whenReady().then(async () => {
     window.webContents.on("will-navigate", (event, target) => { if (!target.startsWith(`${url}/`)) event.preventDefault(); });
     await window.loadURL(url);
     window.on("closed", () => { window = null; });
-  } catch (error) { console.error(error); dialog.showErrorBox("AgentBuzzer", error.message); app.quit(); }
+  } catch (error) { console.error(error); dialog.showErrorBox("AgentBuzzer", localizeError(error.message)); app.quit(); }
 });
 
 app.on("window-all-closed", () => app.quit());

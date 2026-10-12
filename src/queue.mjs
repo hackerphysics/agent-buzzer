@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { configPath } from "./config.mjs";
 import { eventText, eventTime } from "./webhook.mjs";
 import { modelMetadata } from "./model-metadata.mjs";
+import { summaryKey } from "./i18n.mjs";
 
 export function dataPath(name, env = process.env) {
   return join(dirname(configPath(env)), name);
@@ -20,6 +21,7 @@ export function makeEntry(event, now = Date.now(), pendingChannels) {
       agent: event.agent,
       status: event.status,
       summary: event.summary,
+      ...(summaryKey(event.summaryKey) ? { summaryKey: event.summaryKey } : {}),
       key: event.key,
       url: event.url,
       sessionId: eventText(event.sessionId),

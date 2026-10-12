@@ -1,6 +1,6 @@
 {
   "name": "agent-buzzer",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Local notification service for coding agents",
   "author": "hackerphysics",
   "private": true,
