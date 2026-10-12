@@ -30,7 +30,8 @@ test("standard webhook contract and identity defaults preserve value types", () 
   assert.deepEqual(payload, { deviceName: "Office", agentName: "Codex", appName: "AgentBuzzer", sessionName: "Task One", resultDetails: "Full result\nnext line", completedAt: occurredAt, eventId: "id1", sessionId: "s1", turnId: "t1", status: "completed", occurredAt, schemaVersion: 1 });
   assert.deepEqual(Object.keys(payload), WEBHOOK_FIELDS.map(({ name }) => name));
   assert.deepEqual(webhookPayload({ fieldMapping: { deviceName: "  " } }, event, "Office", context), payload);
-  assert.deepEqual(webhookPayload({ payloadFormat: "legacy" }, event, "Office", context), { event, deviceName: "Office" });
+  assert.deepEqual(webhookPayload({ payloadFormat: "legacy" }, event, "Office", context), { event: { agent: event.agent, status: event.status, summary: event.summary }, deviceName: "Office" });
+  assert.deepEqual(webhookPayload({ payloadFormat: "legacy" }, { ...event, key: "key", url }, "Office", context).event, { agent: event.agent, status: event.status, summary: event.summary, key: "key", url });
   const waiting = webhookMessage({ ...event, status: "needs_input", sessionName: "" }, "Office", context);
   assert.equal(waiting.completedAt, null);
   assert.equal(waiting.occurredAt, occurredAt);

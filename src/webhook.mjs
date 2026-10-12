@@ -76,6 +76,10 @@ export function mapWebhookMessage(message, value) {
 }
 
 export function webhookPayload(config, event, deviceName, context) {
-  if (config.payloadFormat === "legacy") return { event, deviceName };
+  if (config.payloadFormat === "legacy") {
+    const legacy = { agent: event.agent, status: event.status, summary: event.summary };
+    for (const name of ["key", "url"]) if (event[name] !== undefined) legacy[name] = event[name];
+    return { event: legacy, deviceName };
+  }
   return mapWebhookMessage(webhookMessage(event, deviceName, context), config.fieldMapping);
 }
