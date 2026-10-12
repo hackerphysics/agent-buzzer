@@ -1,15 +1,20 @@
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { shortSummary } from "./card.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import { eventText, eventTime } from "./webhook.mjs";
+import { modelMetadata } from "./model-metadata.mjs";
 
-export function eventMetadata(input, details) {
+export function eventMetadata(input, details, metadata = {}) {
+  const supplied = modelMetadata(input);
+  const captured = supplied.model && metadata.model && supplied.model !== metadata.model ? {} : metadata;
   return {
     sessionId: eventText(input.sessionId || input.session_id),
     sessionName: eventText(input.sessionName || input.session_name || input.session_title, 256),
     turnId: eventText(input.turnId || input.turn_id),
     resultDetails: eventText(details, 8000),
     occurredAt: eventTime(input.occurredAt || input.occurred_at || input.completed_at, new Date().toISOString()),
+    ...captured,
+    ...supplied,
   };
 }
 
@@ -23,7 +28,7 @@ export function fromCodexStop(input) {
     status: "completed",
     summary: text(input.last_assistant_message, "本轮任务已结束"),
     key: input.turn_id || input.session_id,
-    ...eventMetadata(input, input.last_assistant_message),
+    ...eventMetadata(input, input.last_assistant_message, codexMetadata(input)),
   };
 }
 
@@ -33,7 +38,7 @@ export function fromCodexPermission(input) {
     status: "needs_input",
     summary: text(input.tool_input?.description, "有操作需要你批准"),
     key: input.turn_id || input.session_id,
-    ...eventMetadata(input, input.tool_input?.description),
+    ...eventMetadata(input, input.tool_input?.description, codexMetadata(input)),
   };
 }
 
@@ -45,10 +50,11 @@ function contentText(content) {
   return typeof content?.text === "string" ? content.text : "";
 }
 
-export function lastCopilotReply(transcriptPath) {
-  if (!transcriptPath) return "";
+function transcriptEvents(transcriptPath) {
+  if (typeof transcriptPath !== "string" || !transcriptPath) return [];
   let file;
   try {
+    if (!statSync(transcriptPath).isFile()) return [];
     file = openSync(transcriptPath, "r");
     const size = fstatSync(file).size;
     const start = Math.max(0, size - 512 * 1024);
@@ -59,26 +65,64 @@ export function lastCopilotReply(transcriptPath) {
     const parsed = [];
     for (const line of lines) {
       try {
-        parsed.push(JSON.parse(line));
+        const event = JSON.parse(line);
+        if (event && typeof event === "object" && !Array.isArray(event)) parsed.push(event);
       } catch {
         // The tail may begin or end in the middle of a JSONL record.
       }
     }
-    const lastStart = parsed.findLastIndex((event) => event.type === "assistant.turn_start");
-    for (let i = parsed.length - 1; i > lastStart; i--) {
-      try {
-        const event = parsed[i];
-        if (event.type !== "assistant.message") continue;
-        const value = contentText(event.data?.content);
-        if (value.trim()) return value;
-      } catch {
-        // Ignore incomplete message payloads.
-      }
-    }
+    return parsed;
   } catch {
-    return "";
+    return [];
   } finally {
     if (file !== undefined) closeSync(file);
+  }
+}
+
+function codexMetadata(input) {
+  const events = transcriptEvents(input.transcript_path || input.transcriptPath);
+  let start = events.findLastIndex((event) => event.type === "event_msg" && ["task_started", "turn_started"].includes(event.payload?.type));
+  if (start < 0) start = events.findLastIndex((event) => event.type === "turn_context");
+  if (start < 0) return {};
+  const turnId = input.turn_id || input.turnId;
+  if (turnId && events[start].payload?.turn_id && events[start].payload.turn_id !== turnId) return {};
+  let metadata = {};
+  for (const event of events.slice(start)) {
+    const payload = event.payload;
+    if (event.type === "turn_context") {
+      metadata = { ...metadata, ...modelMetadata({ model: payload?.model }) };
+    } else if (event.type === "event_msg" && payload?.type === "token_count") {
+      // Last-call usage is a context snapshot; total_token_usage is cumulative.
+      const usage = modelMetadata({ contextTokens: payload.info?.last_token_usage?.total_tokens, contextWindow: payload.info?.model_context_window });
+      metadata = { ...(metadata.model ? { model: metadata.model } : {}), ...usage };
+    }
+  }
+  return metadata;
+}
+
+function copilotMetadata(input) {
+  const events = transcriptEvents(input.transcriptPath || input.transcript_path);
+  const start = events.findLastIndex((event) => event.type === "assistant.turn_start");
+  if (start < 0 || ((input.turnId || input.turn_id) && events[start].data?.turnId && events[start].data.turnId !== (input.turnId || input.turn_id))) return {};
+  let metadata = {};
+  for (const event of events.slice(start)) {
+    if (event.type === "assistant.usage") metadata = { ...metadata, ...modelMetadata({ model: event.data?.model }) };
+    if (event.type === "session.usage_info") {
+      const usage = modelMetadata({ contextTokens: event.data?.currentTokens, contextWindow: event.data?.tokenLimit });
+      metadata = { ...(metadata.model ? { model: metadata.model } : {}), ...usage };
+    }
+  }
+  return metadata;
+}
+
+export function lastCopilotReply(transcriptPath) {
+  const events = transcriptEvents(transcriptPath);
+  const lastStart = events.findLastIndex((event) => event.type === "assistant.turn_start");
+  for (let i = events.length - 1; i > lastStart; i--) {
+    const event = events[i];
+    if (event.type !== "assistant.message") continue;
+    const value = contentText(event.data?.content);
+    if (value.trim()) return value;
   }
   return "";
 }
@@ -99,7 +143,7 @@ export function fromCopilotStop(input, reply = lastCopilotReply(input.transcript
     status: "completed",
     summary: text(reply, "本轮任务已结束"),
     key: input.sessionId || input.session_id,
-    ...eventMetadata(input, reply),
+    ...eventMetadata(input, reply, copilotMetadata(input)),
   };
 }
 
@@ -110,7 +154,7 @@ export function fromCopilotNotification(input) {
     status: "needs_input",
     summary: text(input.message, "Copilot 正在等待你处理"),
     key: input.sessionId || input.session_id,
-    ...eventMetadata(input, input.message),
+    ...eventMetadata(input, input.message, copilotMetadata(input)),
   };
 }
 

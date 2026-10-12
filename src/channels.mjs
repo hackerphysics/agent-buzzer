@@ -9,6 +9,6 @@ export function activeChannels(channels) {
 }
 
 export async function sendChannel(name, config, event, deviceName, fetchImpl = fetch, context = {}) {
-  if (name === "feishu") return sendCard(config, buildCard(event, deviceName), fetchImpl);
+  if (name === "feishu") return sendCard(config, buildCard(event, deviceName, context), fetchImpl);
   return sendProvider(name, config, event, deviceName, fetchImpl, context);
 }

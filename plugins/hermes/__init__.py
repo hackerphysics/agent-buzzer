@@ -4,13 +4,14 @@ import json
 from pathlib import Path
 import subprocess
 from datetime import datetime, timezone
+from math import isfinite
 
 
 ENTRY = Path(__file__).resolve().parent / "bin" / "agent-buzzer.mjs"
 NODE_BINARY = "node"
 
 
-def _send(status, summary, session_id=None, turn_id=None, session_name=None):
+def _send(status, summary, session_id=None, turn_id=None, session_name=None, metadata=None):
     payload = {
         "status": status,
         "summary": summary or "",
@@ -19,6 +20,12 @@ def _send(status, summary, session_id=None, turn_id=None, session_name=None):
         "session_name": session_name,
         "occurred_at": datetime.now(timezone.utc).isoformat(),
     }
+    for key in ("model", "model_name", "context_tokens", "context_window", "context_percent", "contextTokens", "contextWindow", "contextPercent"):
+        value = (metadata or {}).get(key)
+        if isinstance(value, float) and not isfinite(value):
+            continue
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            payload[key] = value[:180] if isinstance(value, str) else value
     try:
         subprocess.run(
             [NODE_BINARY, str(ENTRY), "hermes-event"],
@@ -34,17 +41,17 @@ def _send(status, summary, session_id=None, turn_id=None, session_name=None):
 
 
 def _finished(session_id, assistant_response, **kwargs):
-    _send("completed", assistant_response, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"))
+    _send("completed", assistant_response, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs)
 
 
 def _ended(session_id, completed, interrupted, **kwargs):
     if not completed:
         summary = "本轮已中断" if interrupted else "本轮未完成"
-        _send("failed", summary, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"))
+        _send("failed", summary, session_id, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs)
 
 
 def _approval(session_key, description, **kwargs):
-    _send("needs_input", description or "有操作需要你批准", session_key, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"))
+    _send("needs_input", description or "有操作需要你批准", session_key, kwargs.get("turn_id"), kwargs.get("session_name") or kwargs.get("session_title"), kwargs)
 
 
 def register(ctx):

@@ -1,3 +1,6 @@
+import { eventText, eventTime } from "./webhook.mjs";
+import { modelMetadata } from "./model-metadata.mjs";
+
 const STATUS = {
   completed: { title: "任务已完成", color: "green" },
   needs_input: { title: "等待你处理", color: "orange" },
@@ -15,10 +18,34 @@ function escapeMarkdown(value) {
   return String(value).replace(/[\\`*_\[\]<>]/g, "\\$&");
 }
 
-export function buildCard(event, deviceName) {
+function footer(event, deviceName, context) {
+  const device = eventText(deviceName, 100).replace(/[\r\n]/g, " ");
+  const lines = [device ? `AgentBuzzer · ${device}` : "AgentBuzzer"];
+  const timestamp = eventTime(event.occurredAt, eventTime(context.createdAt, null));
+  if (timestamp) {
+    const time = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "shortOffset" }).format(new Date(timestamp));
+    lines.push(`${event.status === "completed" ? "完成时间" : event.status === "failed" ? "结束时间" : "发生时间"}：${time}`);
+  }
+  const { model, contextTokens, contextWindow, contextPercent } = modelMetadata(event);
+  const metadata = [];
+  if (model) metadata.push(`Model: ${model}`);
+  const number = (value) => value.toLocaleString("en-US");
+  const percentValue = contextTokens !== undefined && contextWindow !== undefined ? contextTokens / contextWindow * 100 : contextPercent;
+  const percent = percentValue !== undefined ? ` (${Math.round(percentValue * 10) / 10}%)` : "";
+  if (contextTokens !== undefined) {
+    const window = contextWindow !== undefined ? ` / ${number(contextWindow)}` : "";
+    metadata.push(`Context: ${number(contextTokens)}${window} tokens${percent}`);
+  } else if (contextWindow !== undefined) metadata.push(`Context 窗口: ${number(contextWindow)} tokens${percent}`);
+  else if (contextPercent !== undefined) metadata.push(`Context: ${Math.round(contextPercent * 10) / 10}%`);
+  if (metadata.length) lines.push(metadata.join(" · "));
+  return lines.join("\n");
+}
+
+export function buildCard(event, deviceName, context = {}) {
   const state = STATUS[event.status];
   if (!state) throw new Error("Unsupported notification status");
   const title = `${event.agent} · ${state.title}`;
+  const sessionName = eventText(event.sessionName, 256);
   const card = {
     schema: "2.0",
     config: {
@@ -27,7 +54,7 @@ export function buildCard(event, deviceName) {
     },
     header: {
       title: { tag: "plain_text", content: title },
-      subtitle: { tag: "plain_text", content: `AgentBuzzer · ${deviceName}` },
+      ...(sessionName ? { subtitle: { tag: "plain_text", content: sessionName } } : {}),
       template: state.color,
     },
     body: {
@@ -49,5 +76,10 @@ export function buildCard(event, deviceName) {
       behaviors: [{ type: "open_url", default_url: event.url }],
     });
   }
+  card.body.elements.push({
+    tag: "div",
+    text: { tag: "plain_text", content: footer(event, deviceName, context), text_size: "notation", text_color: "grey" },
+    margin: "8px 0px 0px 0px",
+  });
   return card;
 }

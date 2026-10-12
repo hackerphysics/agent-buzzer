@@ -78,7 +78,7 @@ for (const [name, config, result] of cases) {
     if (name === "discord") { assert.deepEqual(body.allowed_mentions, { parse: [] }); assert.equal(new URL(request.url).searchParams.get("wait"), "true"); }
     if (name === "teams") assert.equal(body.attachments[0].content.type, "AdaptiveCard");
     if (["googlechat", "mattermost"].includes(name)) assert.doesNotMatch(body.text, /@everyone/);
-    if (name === "feishuBot") assert.equal(body.sign, createHmac("sha256", `${body.timestamp}\n${token}`).update("").digest("base64"));
+    if (name === "feishuBot") { assert.equal(body.msg_type, "interactive"); assert.equal(body.card.schema, "2.0"); assert.equal(body.sign, createHmac("sha256", `${body.timestamp}\n${token}`).update("").digest("base64")); }
     if (name === "dingtalk") {
       const url = new URL(request.url);
       assert.equal(url.searchParams.get("sign"), createHmac("sha256", token).update(`${url.searchParams.get("timestamp")}\n${token}`).digest("base64"));

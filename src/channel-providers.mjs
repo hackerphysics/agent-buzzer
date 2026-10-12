@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { shortSummary } from "./card.mjs";
+import { buildCard, shortSummary } from "./card.mjs";
 import { channelDefinition, validateEndpoint, validateField } from "./channel-schema.mjs";
 import { webhookPayload } from "./webhook.mjs";
 
@@ -133,7 +133,7 @@ export async function sendProvider(name, config, event, deviceName, fetchImpl = 
   } else if (name === "googlechat" || name === "mattermost") {
     payload = { text: text.replaceAll("@", "@\u200b") };
   } else if (name === "feishuBot") {
-    payload = { msg_type: "text", content: { text } };
+    payload = { msg_type: "interactive", card: buildCard(event, deviceName, context) };
     if (config.signingSecret) {
       const timestamp = String(Math.floor(Date.now() / 1000));
       payload.timestamp = timestamp;

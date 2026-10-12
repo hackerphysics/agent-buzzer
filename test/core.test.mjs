@@ -11,10 +11,11 @@ test("card is an interactive Feishu card with device, status and short summary",
   const card = buildCard({ agent: "Codex", status: "needs_input", summary: "请批准执行" }, "Office-PC");
   assert.equal(card.schema, "2.0");
   assert.match(card.header.title.content, /等待你处理/);
-  assert.match(card.header.subtitle.content, /Office-PC/);
+  assert.equal(card.header.subtitle, undefined);
+  assert.match(card.body.elements.at(-1).text.content, /Office-PC/);
   assert.equal(card.body.elements[0].content, "请批准执行");
   assert.equal(shortSummary("x".repeat(300)).length, 160);
-  assert.equal(card.body.elements.length, 1);
+  assert.equal(card.body.elements.length, 2);
   const linked = buildCard({ agent: "Codex", status: "completed", summary: "完成", url: "https://example.com/task" }, "Office-PC");
   assert.equal(linked.body.elements[1].behaviors[0].type, "open_url");
 });

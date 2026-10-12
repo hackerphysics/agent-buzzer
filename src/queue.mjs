@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { configPath } from "./config.mjs";
 import { eventText, eventTime } from "./webhook.mjs";
+import { modelMetadata } from "./model-metadata.mjs";
 
 export function dataPath(name, env = process.env) {
   return join(dirname(configPath(env)), name);
@@ -26,6 +27,7 @@ export function makeEntry(event, now = Date.now(), pendingChannels) {
       turnId: eventText(event.turnId),
       resultDetails: eventText(event.resultDetails, 8000) || eventText(event.summary, 8000),
       occurredAt: eventTime(event.occurredAt, new Date(now).toISOString()),
+      ...modelMetadata(event),
     },
     createdAt: new Date(now).toISOString(),
     ...(event.deviceName ? { deviceName: eventText(event.deviceName, 100) } : {}),
