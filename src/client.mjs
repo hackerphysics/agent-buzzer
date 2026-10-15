@@ -24,16 +24,29 @@ export async function ensureService({ signal } = {}) {
   signal = signal ? AbortSignal.any([signal, startupDeadline]) : startupDeadline;
   try { return await health(signal); } catch { /* Start the local service below. */ }
   signal.throwIfAborted();
-  const child = spawn(process.execPath, [ENTRY, "serve"], {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: true,
-  });
-  await new Promise((resolvePromise, reject) => {
-    child.once("spawn", resolvePromise);
-    child.once("error", reject);
-  });
-  child.unref();
+  if (process.platform === "win32") {
+    const quote = (value) => `'${value.replaceAll("'", "''")}'`;
+    // ShellExecute avoids inheriting the outer PowerShell hook's output pipes.
+    const script = `$ErrorActionPreference = 'Stop'; Start-Process -WindowStyle Hidden -FilePath ${quote(process.execPath)} -ArgumentList ${quote(`"${ENTRY}" serve`)}`;
+    const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+      stdio: "ignore", windowsHide: true, signal,
+    });
+    await new Promise((resolvePromise, reject) => {
+      launcher.once("error", reject);
+      launcher.once("exit", (code) => code === 0 ? resolvePromise() : reject(new Error("AgentBuzzer service launcher failed")));
+    });
+  } else {
+    const child = spawn(process.execPath, [ENTRY, "serve"], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    await new Promise((resolvePromise, reject) => {
+      child.once("spawn", resolvePromise);
+      child.once("error", reject);
+    });
+    child.unref();
+  }
   while (!signal.aborted) {
     await sleep(200, undefined, { signal });
     try { return await health(signal); } catch { /* Startup can race other hooks. */ }

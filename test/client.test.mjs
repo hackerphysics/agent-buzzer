@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -29,17 +29,21 @@ async function fixture(t, handler, settings = {}) {
   return { env, dir };
 }
 
-async function runHook(env, action = "codex-stop", shell = false) {
-  const entry = join(ROOT, "bin", "agent-buzzer.mjs");
+async function runHook(env, action = "codex-stop", shell = false, { entry = join(ROOT, "bin", "agent-buzzer.mjs"), node = process.execPath } = {}) {
   const windows = process.platform === "win32";
-  const command = (windows ? windowsHookCommand : posixHookCommand)(process.execPath, entry, action);
+  const command = (windows ? windowsHookCommand : posixHookCommand)(node, entry, action);
   const child = shell
     ? spawn(windows ? "powershell.exe" : "/bin/sh", windows
       ? ["-NoProfile", "-NonInteractive", "-Command", command] : ["-c", command], { env, windowsHide: true })
-    : spawn(process.execPath, [entry, action], { env, windowsHide: true });
+    : spawn(node, [entry, action], { env, windowsHide: true });
   const started = Date.now();
   let stdout = "", stderr = "", timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; child.kill(); }, 12000);
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill();
+    child.stdout.destroy();
+    child.stderr.destroy();
+  }, 12000);
   child.stdout.on("data", (chunk) => { stdout += chunk; });
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   child.stdin.end(JSON.stringify({
@@ -93,6 +97,41 @@ test("accepted events let the actual hook process and pipes close promptly", asy
   assert.ok(await runHook(env) < 8000);
   assert.equal(events, 1);
   assert.deepEqual(listEntries(env), []);
+});
+
+test("cold-started background service cannot retain the hook's output pipes", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-buzzer-cold-"));
+  const staged = join(dir, "staged");
+  const app = join(dir, "User's app $HOME 100% & (test) ! cafe \u4e2d\u6587");
+  const env = { ...process.env, AGENTBUZZER_CONFIG: join(dir, "config.json") };
+  const allocator = createServer();
+  await new Promise((resolve) => allocator.listen(0, "127.0.0.1", resolve));
+  const endpoint = `http://127.0.0.1:${allocator.address().port}`;
+  env.AGENTBUZZER_PORT = String(allocator.address().port);
+  await new Promise((resolve) => allocator.close(resolve));
+  t.after(async () => {
+    try { await fetch(`${endpoint}/api/shutdown`, { method: "POST", signal: AbortSignal.timeout(2000) }); } catch { /* Startup may have failed. */ }
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try { await fetch(`${endpoint}/health`, { signal: AbortSignal.timeout(200) }); }
+      catch { break; }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+  saveSettings({ notifications: { dnd: true }, channels: { feishu: { enabled: false }, webhook: { enabled: true } } }, env);
+  mkdirSync(join(staged, "runtime"), { recursive: true });
+  for (const name of ["bin", "src", "package.json", "node_modules/nodemailer"]) {
+    cpSync(join(ROOT, name), join(staged, name), { recursive: true });
+  }
+  renameSync(staged, app);
+  const node = join(app, "runtime", process.platform === "win32" ? "node.exe" : "node");
+  copyFileSync(process.execPath, node);
+  assert.equal(readFileSync(join(app, "bin", "agent-buzzer.mjs"), "utf8"), readFileSync(join(ROOT, "bin", "agent-buzzer.mjs"), "utf8"));
+  await runHook(env, "codex-stop", true, { entry: join(app, "bin", "agent-buzzer.mjs"), node });
+  // The daemon must still be running when all hook output pipes have closed.
+  assert.equal((await (await fetch(`${endpoint}/health`)).json()).service, "agent-buzzer");
+  assert.equal(listEntries(env).length, 1);
+  assert.equal(listEntries(env)[0].attempts, 0, "DND must prevent any remote delivery");
 });
 
 for (const failure of ["invalid JSON", "stalled body"]) {
