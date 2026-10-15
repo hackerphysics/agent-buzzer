@@ -189,7 +189,10 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     syncCycle();
     const next = resetBreak(n.cycle, cycle, now().getTime());
     if (next !== cycle) { cycle = next; writeCycle(cycle, env); }
-    void pump();
+    // Acknowledge the durable entry before credential loading or delivery can block.
+    setImmediate(() => {
+      void pump().catch((error) => console.error(`AgentBuzzer: ${error.message}`));
+    });
     return { disposition: "queued", id: entry.id };
   }
 

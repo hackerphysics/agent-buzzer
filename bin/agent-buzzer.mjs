@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 const args = process.argv.slice(2);
 const hook = ["codex-stop", "codex-permission"].includes(args[0]);
+const startedAt = performance.now();
 
 function record(status, error) {
   if (!hook) return;
@@ -22,6 +23,8 @@ function record(status, error) {
     if (existsSync(path) && statSync(path).size > 128 * 1024) renameSync(path, `${path}.previous`);
     appendFileSync(path, `${JSON.stringify({
       time: new Date().toISOString(), command: args[0], status, reason,
+      pid: process.pid, elapsedMs: Math.round(performance.now() - startedAt),
+      exitCode: status === "exited" ? Number(process.exitCode || 0) : undefined,
       code: /^[A-Z0-9_]+$/.test(error?.code || "") ? error.code : undefined,
       pathAvailable: Boolean(process.env.PATH || process.env.Path),
     })}\n`, { mode: 0o600 });
@@ -29,6 +32,7 @@ function record(status, error) {
 }
 
 record("started");
+if (hook) process.once("exit", () => record("exited"));
 import("../src/cli.mjs").then(({ main }) => main(args)).then(() => record("completed")).catch((error) => {
   record("failed", error);
   console.error(`AgentBuzzer: ${error.message}`);

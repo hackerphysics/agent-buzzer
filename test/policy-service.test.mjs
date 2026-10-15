@@ -67,6 +67,19 @@ test("service persists failed deliveries and replays after restart", async (t) =
   assert.equal(sent[0].delivered.summary, "Done");
 });
 
+test("durable event acknowledgement precedes synchronous delivery work", async (t) => {
+  const { env } = workspace(t);
+  let deliveries = 0;
+  const service = createService({ env, intervalMs: 100000, deliver: async () => { deliveries++; } });
+  t.after(async () => service.close());
+  await service.start(0);
+  const result = await service.accept(event());
+  assert.equal(result.disposition, "queued");
+  assert.equal(deliveries, 0, "Credential loading and delivery must not run before acknowledgement");
+  assert.equal(listEntries(env)[0].id, result.id);
+  await eventually(() => deliveries === 1 && listEntries(env).length === 0);
+});
+
 test("turning notifications off purges backlog and never replays it when on again", async (t) => {
   const { env } = workspace(t);
   const n = loadConfig(env).notifications;
