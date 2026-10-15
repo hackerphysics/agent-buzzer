@@ -226,3 +226,23 @@ test("delivery retries keep the resolved name even after the thread is renamed",
   assert.deepEqual(names, ["Captured title", "Captured title"]);
   assert.equal(listEntries(env).length, 0);
 });
+
+test("shutdown does not look up the rest of the backlog or start delivery", async (t) => {
+  const { env } = fixture(t);
+  let finish;
+  let calls = 0;
+  let closing = false;
+  const pending = new Promise((resolve) => { finish = resolve; });
+  const service = createService({ env, intervalMs: 100000, resolveCodexName: () => { calls++; return pending; }, deliver: async () => assert.fail("Shutdown must not begin delivery") });
+  t.after(async () => { finish(""); if (!closing) await service.close(); });
+  await service.start(0);
+  await service.accept(stop());
+  await service.accept(stop("thread-two"));
+  await eventually(() => calls === 1);
+  const stopped = service.close();
+  closing = true;
+  finish("Captured before shutdown");
+  await stopped;
+  assert.equal(calls, 1);
+  assert.equal(listEntries(env).length, 2);
+});

@@ -132,6 +132,7 @@ export function createService({ env = process.env, deliver = sendChannel, detect
     try {
       syncCycle();
       for (const entry of listEntries(env)) {
+        if (closing) break;
         if (uninstallingAgents.has(entry.event.agent)) continue;
         let config = loadConfig(env, { includeSecret: false });
         let decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
