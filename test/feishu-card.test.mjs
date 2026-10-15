@@ -26,6 +26,7 @@ function workspace(t) {
 
 test("Feishu card places session name in subtitle and known metadata in a muted final footer", () => {
   const card = buildCard({ ...event, url: "https://example.com/task" }, "Office-PC");
+  assert.equal(card.header.title.content, "Office-PC：Codex");
   assert.equal(card.header.subtitle.content, "Update settings");
   assert.equal(card.header.subtitle.tag, "plain_text");
   assert.equal(card.body.elements[0].content, "Done");
@@ -35,7 +36,9 @@ test("Feishu card places session name in subtitle and known metadata in a muted 
   assert.equal(footer.text.tag, "plain_text");
   assert.equal(footer.text.text_size, "notation");
   assert.equal(footer.text.text_color, "grey");
-  assert.match(footer.text.content, /AgentBuzzer · Office-PC/);
+  assert.doesNotMatch(footer.text.content, /AgentBuzzer|Office-PC/);
+  assert.equal(footer.text.content.split("\n").length, 2);
+  assert.match(footer.text.content, /^任务已完成 · 完成时间：/);
   assert.match(footer.text.content, /完成时间：/);
   assert.match(footer.text.content, /Model: gpt-example/);
   assert.match(footer.text.content, /Context: 24,000 \/ 128,000 tokens \(18\.8%\)/);
@@ -46,7 +49,8 @@ test("Feishu card places session name in subtitle and known metadata in a muted 
 test("cards omit unavailable metadata and never turn permission time into a completion time", () => {
   const bare = buildCard({ agent: "Hermes", status: "completed", summary: "Done", sessionId: "id-only" });
   assert.equal(bare.header.subtitle, undefined);
-  assert.equal(bare.body.elements.at(-1).text.content, "AgentBuzzer");
+  assert.equal(bare.header.title.content, "Hermes");
+  assert.equal(bare.body.elements.at(-1).text.content, "任务已完成");
   const waiting = buildCard({ ...event, status: "needs_input" }, "Office-PC");
   assert.match(waiting.body.elements.at(-1).text.content, /发生时间：/);
   assert.doesNotMatch(waiting.body.elements.at(-1).text.content, /完成时间/);

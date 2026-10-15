@@ -12,8 +12,9 @@ import { dataPath, listEntries, makeEntry, persistEntry, purgeAgent, purgeDisabl
 import { credentialKeys, hasSecret, saveCredentials } from "./secret-store.mjs";
 import { buildId } from "./build-id.mjs";
 import { runCommand as executeCommand } from "./commands.mjs";
-import { webhookPayload } from "./webhook.mjs";
+import { eventText, webhookPayload } from "./webhook.mjs";
 import { LANGUAGES, normalizeLanguage, translate } from "./i18n.mjs";
+import { resolveCodexSessionName } from "./codex-session-name.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -91,7 +92,7 @@ async function adapterStatus() {
   return results;
 }
 
-export function createService({ env = process.env, deliver = sendChannel, detectAdapters = adapterStatus, uninstall = async (agent) => JSON.parse(await runCommand(process.execPath, [join(ROOT, "scripts", "uninstall.mjs"), `--${agent}`])), now = () => new Date(), intervalMs = 1000 } = {}) {
+export function createService({ env = process.env, deliver = sendChannel, detectAdapters = adapterStatus, resolveCodexName = resolveCodexSessionName, uninstall = async (agent) => JSON.parse(await runCommand(process.execPath, [join(ROOT, "scripts", "uninstall.mjs"), `--${agent}`])), now = () => new Date(), intervalMs = 1000 } = {}) {
   let cycle = readCycle(env);
   let working = false;
   let closing = false;
@@ -132,11 +133,21 @@ export function createService({ env = process.env, deliver = sendChannel, detect
       syncCycle();
       for (const entry of listEntries(env)) {
         if (uninstallingAgents.has(entry.event.agent)) continue;
-        const config = loadConfig(env, { includeSecret: false });
-        const decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
+        let config = loadConfig(env, { includeSecret: false });
+        let decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
         if (decision === "drop") { removeEntry(entry); continue; }
-        if (decision === "wait" || entry.nextAttemptAt > now().getTime()) continue;
         entry.pendingChannels ||= activeChannels(config.channels);
+        if (entry.event.agent === "Codex" && entry.event.sessionId && !entry.event.sessionName && !entry.sessionNameResolved) {
+          let name = "";
+          try { name = eventText(await resolveCodexName(entry.event.sessionId, { env }), 256); }
+          catch { /* A missing title must not prevent delivery. */ }
+          if (name) entry.event.sessionName = name;
+          entry.sessionNameResolved = true;
+          if (!saveProgress(entry)) continue;
+          config = loadConfig(env, { includeSecret: false });
+          decision = deliveryDecision(config.notifications, entry.event.agent, cycle.phase, now());
+        }
+        if (decision === "wait" || entry.nextAttemptAt > now().getTime()) continue;
         for (const channel of [...entry.pendingChannels]) {
           if (!existsSync(entry.path) || uninstallingAgents.has(entry.event.agent)) break;
           const current = loadConfig(env, { includeSecret: false });

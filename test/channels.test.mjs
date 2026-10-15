@@ -92,7 +92,10 @@ for (const [name, config, result] of cases) {
     if (name === "pushover") assert.equal(body.token, token);
     if (name === "line") { assert.equal(body.to, config.recipientId); assert.deepEqual(body.messages.map(({ type }) => type), ["text"]); assert.match(request.headers["X-Line-Retry-Key"], /^[0-9a-f-]{36}$/); }
     if (name === "sms") { assert.equal(body.To, config.to); assert.equal(Buffer.from(request.headers.Authorization.slice(6), "base64").toString(), `${config.accountSid}:${token}`); }
-    if (name !== "webhook") assert.match(JSON.stringify(body), /AgentBuzzer/);
+    if (name === "feishuBot") {
+      assert.equal(body.card.header.title.content, "Test-PC：Codex");
+      assert.doesNotMatch(JSON.stringify(body), /AgentBuzzer/);
+    } else if (name !== "webhook") assert.match(JSON.stringify(body), /AgentBuzzer/);
   });
 }
 

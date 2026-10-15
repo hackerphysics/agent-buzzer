@@ -84,7 +84,7 @@ test("settings API persists only the language preference and serves the localize
 test("notifications translate app-owned copy but leave results, names, and JSON field names intact", async () => {
   const event = { agent: "Codex", status: "completed", summary: "用户原始回复", sessionName: "我的会话", occurredAt: "2026-10-12T08:00:00Z", url: "https://example.com/task" };
   const card = buildCard(event, "办公电脑", { language: "en" });
-  assert.equal(card.header.title.content, "Codex · Task completed");
+  assert.equal(card.header.title.content, "办公电脑: Codex");
   assert.equal(card.header.subtitle.content, "我的会话");
   assert.equal(card.body.elements[0].content, "用户原始回复");
   assert.equal(card.body.elements[1].text.content, "View Task");
